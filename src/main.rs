@@ -1,5 +1,5 @@
 use actix_web::{
-    delete, get, patch, post,
+    delete, get, post,
     web::{self, Json},
     App, HttpRequest, HttpServer, Responder,
 };
@@ -16,26 +16,26 @@ async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
 }
 
 #[get("/orders")]
-async fn get_orders(controller: web::Data<AppState>, req: HttpRequest) -> impl Responder {
+async fn get_orders(controller: web::Data<AppState>, _req: HttpRequest) -> impl Responder {
     // TODO: add some RequestType to filter
     let orders = controller.get_orders().await;
     Json(orders)
 }
 
 #[post("/orders")]
-async fn create_orders(controller: web::Data<AppState>, req: HttpRequest) -> impl Responder {
+async fn create_orders(_controller: web::Data<AppState>, _req: HttpRequest) -> impl Responder {
     // "ok" return tx hash
     "unimplemented".to_string()
 }
 
 #[delete("/orders")]
-async fn cancel_orders(controller: web::Data<AppState>, req: HttpRequest) -> impl Responder {
+async fn cancel_orders(controller: web::Data<AppState>, _req: HttpRequest) -> impl Responder {
     let signature = controller.cancel_orders().await;
     Json(signature)
 }
 
 #[get("/positions")]
-async fn get_positions(controller: web::Data<AppState>, req: HttpRequest) -> impl Responder {
+async fn get_positions(controller: web::Data<AppState>, _req: HttpRequest) -> impl Responder {
     // TODO: add some RequestType to filter
     let positions = controller.get_positions().await;
     Json(positions)
@@ -43,7 +43,7 @@ async fn get_positions(controller: web::Data<AppState>, req: HttpRequest) -> imp
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let secret_key = std::env::var("GATEWAY_SECRET_KEY").expect("missing GATEWAY_SECRET_KEY");
+    let secret_key = std::env::var("DRIFT_GATEWAY_KEY").expect("missing DRIFT_GATEWAY_KEY");
     let config: GatewayConfig = argh::from_env();
 
     let state = AppState::new(secret_key.as_str(), &config.rpc_host, config.dev).await;

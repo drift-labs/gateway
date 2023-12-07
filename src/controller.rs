@@ -10,18 +10,18 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
-        let wallet = Wallet::from_seed_bs58(
+        let wallet = Wallet::try_from_str(
             if devnet {
                 Context::Dev
             } else {
                 Context::Mainnet
             },
             secret_key,
-        );
-        Self {
-            wallet,
-            client: DriftClient::new(endpoint).await.expect("connects"),
-        }
+        )
+        .expect("valid key");
+        let client = DriftClient::new(endpoint).await.expect("connects");
+        client.subscribe_account(&wallet).await.expect("cache on");
+        Self { wallet, client }
     }
 
     pub async fn cancel_orders(&self) -> Result<String, ()> {

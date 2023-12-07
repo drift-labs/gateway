@@ -4,7 +4,7 @@
 //!
 use drift_sdk::{
     constants::{PerpMarketConfig, SpotMarketConfig},
-    types::{self as sdk_types, PositionDirection, PostOnlyParam},
+    types::{self as sdk_types, PositionDirection},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
