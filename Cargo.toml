@@ -1,0 +1,11 @@
+[package]
+name = "drift-gateway"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.4.0"
+argh = "0.1.12"
+drift-sdk = { path = "../drift-sdk-rs" }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
