@@ -4,7 +4,10 @@ use actix_web::{
     App, HttpRequest, HttpServer, Responder,
 };
 use argh::FromArgs;
+use log::info;
+
 use controller::AppState;
+use types::PlaceOrdersRequest;
 
 mod controller;
 mod types;
@@ -23,9 +26,12 @@ async fn get_orders(controller: web::Data<AppState>, _req: HttpRequest) -> impl 
 }
 
 #[post("/orders")]
-async fn create_orders(_controller: web::Data<AppState>, _req: HttpRequest) -> impl Responder {
-    // "ok" return tx hash
-    "unimplemented".to_string()
+async fn create_orders(
+    controller: web::Data<AppState>,
+    req: Json<PlaceOrdersRequest>,
+) -> impl Responder {
+    let signature = controller.place_orders(req.0).await;
+    Json(signature)
 }
 
 #[delete("/orders")]
@@ -43,10 +49,22 @@ async fn get_positions(controller: web::Data<AppState>, _req: HttpRequest) -> im
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let secret_key = std::env::var("DRIFT_GATEWAY_KEY").expect("missing DRIFT_GATEWAY_KEY");
     let config: GatewayConfig = argh::from_env();
-
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+    let secret_key = std::env::var("DRIFT_GATEWAY_KEY").expect("missing DRIFT_GATEWAY_KEY");
     let state = AppState::new(secret_key.as_str(), &config.rpc_host, config.dev).await;
+
+    info!(
+        "🏛️ gateway listening at http://{}:{}",
+        config.host, config.port
+    );
+    info!(
+        "🪪: authority: {:?}, user: {:?}",
+        state.authority(),
+        state.user()
+    );
 
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(state.clone())).service(
@@ -64,7 +82,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 #[derive(FromArgs)]
-/// Reach new heights.
+/// Drift gateway server
 struct GatewayConfig {
     /// the solana RPC URL
     #[argh(positional)]

@@ -4,19 +4,20 @@
 //!
 use drift_sdk::{
     constants::{PerpMarketConfig, SpotMarketConfig},
-    types::{self as sdk_types, PositionDirection},
+    types::{self as sdk_types, MarketType, OrderParams, PositionDirection, PostOnlyParam},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Serialize, Deserialize)]
 pub struct Order {
-    #[serde(
-        rename = "type",
-        serialize_with = "order_type_ser",
-        deserialize_with = "order_type_de"
-    )]
+    #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
     order_type: sdk_types::OrderType,
     market_id: u16,
+    #[serde(
+        serialize_with = "market_type_ser",
+        deserialize_with = "market_type_de"
+    )]
+    market_type: MarketType,
     amount: i64,
     price: u64,
     post_only: bool,
@@ -28,12 +29,9 @@ impl From<sdk_types::Order> for Order {
     fn from(value: sdk_types::Order) -> Self {
         Order {
             market_id: value.market_index,
+            market_type: value.market_type,
             price: value.price,
-            amount: value.base_asset_amount as i64
-                * match value.direction {
-                    PositionDirection::Long => 1,
-                    PositionDirection::Short => -1,
-                },
+            amount: value.base_asset_amount as i64 * (1_i64 - (2 * value.direction as i64)),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
@@ -108,23 +106,76 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
 
 #[derive(Serialize, Deserialize)]
 pub struct PlaceOrdersRequest {
-    orders: Vec<PlaceOrder>,
+    pub orders: Vec<PlaceOrder>,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaceOrder {
     market_id: u16,
+    #[serde(
+        serialize_with = "market_type_ser",
+        deserialize_with = "market_type_de"
+    )]
+    market_type: sdk_types::MarketType,
     amount: i64,
     price: u64,
-    #[serde(
-        rename = "type",
-        serialize_with = "order_type_ser",
-        deserialize_with = "order_type_de"
-    )]
+    #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
     order_type: sdk_types::OrderType,
+    #[serde(default)]
     post_only: bool,
+    #[serde(default)]
     reduce_only: bool,
+    #[serde(default)]
     immediate_or_cancel: bool,
+}
+
+fn market_type_ser<S>(market_type: &sdk_types::MarketType, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let s = match market_type {
+        sdk_types::MarketType::Spot => "spot",
+        sdk_types::MarketType::Perp => "perp",
+    };
+    serializer.serialize_str(s)
+}
+
+fn market_type_de<'de, D>(deserializer: D) -> Result<sdk_types::MarketType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let market_type = Deserialize::deserialize(deserializer)?;
+    match market_type {
+        "spot" => Ok(sdk_types::MarketType::Spot),
+        "perp" => Ok(sdk_types::MarketType::Perp),
+        _ => Err(serde::de::Error::custom("invalid market type")),
+    }
+}
+
+impl From<PlaceOrder> for sdk_types::OrderParams {
+    fn from(value: PlaceOrder) -> Self {
+        OrderParams {
+            market_index: value.market_id,
+            market_type: value.market_type,
+            order_type: value.order_type,
+            base_asset_amount: value.amount.unsigned_abs(),
+            direction: if value.amount >= 0 {
+                PositionDirection::Long
+            } else {
+                PositionDirection::Short
+            },
+            price: value.price,
+            immediate_or_cancel: value.immediate_or_cancel,
+            reduce_only: value.reduce_only,
+            post_only: if value.post_only {
+                PostOnlyParam::MustPostOnly
+            } else {
+                PostOnlyParam::None
+            },
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

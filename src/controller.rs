@@ -1,6 +1,9 @@
-use drift_sdk::{types::Context, DriftClient, TransactionBuilder, Wallet};
+use drift_sdk::{types::Context, DriftClient, Pubkey, TransactionBuilder, Wallet};
+use log::error;
 
-use crate::types::{AllMarketsResponse, GetOrdersResponse, GetPositionsResponse};
+use crate::types::{
+    AllMarketsResponse, GetOrdersResponse, GetPositionsResponse, PlaceOrdersRequest,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -9,6 +12,12 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub fn user(&self) -> &Pubkey {
+        self.wallet.user()
+    }
+    pub fn authority(&self) -> Pubkey {
+        self.wallet.authority()
+    }
     pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
         let wallet = Wallet::try_from_str(
             if devnet {
@@ -72,5 +81,28 @@ impl AppState {
             spot: spot.iter().map(|x| (*x).into()).collect(),
             perp: perp.iter().map(|x| (*x).into()).collect(),
         }
+    }
+
+    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> Result<String, ()> {
+        let orders = req.orders.into_iter().map(Into::into).collect();
+        let tx = TransactionBuilder::new(
+            &self.wallet,
+            &self
+                .client
+                .get_account_data(&self.wallet)
+                .await
+                .map_err(|_| ())?,
+        )
+        .place_orders(orders)
+        .build();
+
+        self.client
+            .sign_and_send(&self.wallet, tx)
+            .await
+            .map_err(|err| {
+                error!("{err:?}");
+                ()
+            })
+            .map(|s| s.to_string())
     }
 }

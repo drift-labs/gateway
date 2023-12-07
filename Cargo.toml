@@ -7,5 +7,6 @@ edition = "2021"
 actix-web = "4.4.0"
 argh = "0.1.12"
 drift-sdk = { path = "../drift-sdk-rs" }
+env_logger = "0.10.1"
+log = "0.4.20"
 serde = { version = "1.0.193", features = ["derive"] }
-serde_json = "1.0.108"
