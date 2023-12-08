@@ -10,3 +10,4 @@ drift-sdk = { package = "drift-sdk", git = "https://github.com/circuit-research/
 env_logger = "0.10.1"
 log = "0.4.20"
 serde = { version = "1.0.193", features = ["derive"] }
+thiserror = "1.0.38"

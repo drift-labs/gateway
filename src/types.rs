@@ -179,6 +179,31 @@ impl From<PlaceOrder> for sdk_types::OrderParams {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct Market {
+    /// The market index
+    pub id: u16,
+    #[serde(
+        rename = "type",
+        serialize_with = "market_type_ser",
+        deserialize_with = "market_type_de"
+    )]
+    /// The market type (Spot or Perp)
+    pub market_type: MarketType,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPositionsRequest {
+    pub market: Option<Market>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetOrdersRequest {
+    pub market: Option<Market>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct GetOrdersResponse {
     pub orders: Vec<Order>,
 }
@@ -220,4 +245,13 @@ impl From<PerpMarketConfig<'static>> for MarketInfo {
 pub struct AllMarketsResponse {
     pub spot: Vec<MarketInfo>,
     pub perp: Vec<MarketInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelOrdersRequest {
+    /// Market to cancel orders
+    pub market: Option<Market>,
+    /// order Ids to cancel
+    pub ids: Vec<u32>,
 }
