@@ -3,7 +3,7 @@ use std::task::Poll;
 use actix_web::{web::Bytes, Error};
 use drift_sdk::{
     dlob::{DLOBClient, OrderbookStream},
-    types::{Context, MarketType, SdkError},
+    types::{Context, MarketType, OrderParams, SdkError},
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
 use futures_util::{Stream, StreamExt};
@@ -12,13 +12,16 @@ use thiserror::Error;
 
 use crate::types::{
     AllMarketsResponse, CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest,
-    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, PlaceOrdersRequest,
+    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest,
+    PlaceOrdersRequest,
 };
 
 #[derive(Error, Debug)]
 pub enum ControllerError {
     #[error("internal server error")]
     Sdk(#[from] SdkError),
+    #[error("order id not found")]
+    UnknownOrderId,
 }
 
 #[derive(Clone)]
@@ -169,6 +172,35 @@ impl AppState {
         )
         .place_orders(orders)
         .build();
+
+        let signature = self.client.sign_and_send(&self.wallet, tx).await?;
+
+        Ok(signature.to_string())
+    }
+
+    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> Result<String, ControllerError> {
+        let user_data = &self.client.get_account_data(self.user()).await?;
+
+        let mut params = Vec::<(u32, OrderParams)>::with_capacity(req.orders.len());
+        for order in req.orders {
+            if let Some(id) = order.order_id {
+                params.push((id, order.into()));
+            } else if order.user_order_id > 0 {
+                if let Some(onchain_order) = user_data
+                    .orders
+                    .iter()
+                    .find(|x| x.user_order_id == order.user_order_id)
+                {
+                    params.push((onchain_order.order_id, order.into()));
+                }
+            } else {
+                return Err(ControllerError::UnknownOrderId);
+            }
+        }
+
+        let tx = TransactionBuilder::new(&self.wallet, user_data)
+            .modify_orders(params)
+            .build();
 
         let signature = self.client.sign_and_send(&self.wallet, tx).await?;
 

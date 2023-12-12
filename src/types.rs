@@ -22,6 +22,7 @@ pub struct Order {
     price: u64,
     post_only: bool,
     reduce_only: bool,
+    user_order_id: u8,
     immediate_or_cancel: bool,
 }
 
@@ -36,6 +37,7 @@ impl From<sdk_types::Order> for Order {
             reduce_only: value.reduce_only,
             order_type: value.order_type,
             post_only: value.post_only,
+            user_order_id: value.user_order_id,
         }
     }
 }
@@ -104,6 +106,8 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
     }
 }
 
+pub type ModifyOrdersRequest = PlaceOrdersRequest;
+
 #[derive(Serialize, Deserialize)]
 pub struct PlaceOrdersRequest {
     pub orders: Vec<PlaceOrder>,
@@ -120,8 +124,11 @@ pub struct PlaceOrder {
     market_type: sdk_types::MarketType,
     amount: i64,
     price: u64,
+    /// 0 indicates it is not set (according to program)
     #[serde(default)]
-    user_order_id: u8,
+    pub user_order_id: u8,
+    /// only used for modify orders
+    pub order_id: Option<u32>,
     #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
     order_type: sdk_types::OrderType,
     #[serde(default)]

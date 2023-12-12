@@ -1,15 +1,15 @@
 use actix_web::{
-    delete, get, post,
+    delete, get, patch, post,
     web::{self, Json},
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
 use log::{error, info};
 
-use controller::AppState;
+use controller::{AppState, ControllerError};
 use types::{
     CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest, GetPositionsRequest,
-    PlaceOrdersRequest,
+    ModifyOrdersRequest, PlaceOrdersRequest,
 };
 
 mod controller;
@@ -45,6 +45,21 @@ async fn create_orders(
             error!("{err:?}");
             Either::Left(HttpResponse::InternalServerError())
         }
+        Ok(payload) => Either::Right(Json(payload)),
+    }
+}
+
+#[patch("/orders")]
+async fn modify_orders(
+    controller: web::Data<AppState>,
+    req: Json<ModifyOrdersRequest>,
+) -> impl Responder {
+    match controller.modify_orders(req.0).await {
+        Err(ControllerError::Sdk(err)) => {
+            error!("{err:?}");
+            Either::Left(HttpResponse::InternalServerError())
+        }
+        Err(ControllerError::UnknownOrderId) => Either::Left(HttpResponse::NotFound()),
         Ok(payload) => Either::Right(Json(payload)),
     }
 }
@@ -114,6 +129,7 @@ async fn main() -> std::io::Result<()> {
                 .service(get_orders)
                 .service(create_orders)
                 .service(cancel_orders)
+                .service(modify_orders)
                 .service(get_orderbooks),
         )
     })
