@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "**.rs"
+      - "**.toml"
+      - "**.lock"
+      - ".github/workflows/*.yml"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "**.rs"
+      - "**.toml"
+      - "**.lock"
+      - ".github/workflows/*.yml"
+
+jobs:
+  format-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v2
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.73.0
+          components: rustfmt
+          default: true
+      - name: Init Cargo Cache
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/            
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Build
+        run: cargo check --all
+      - name: Test
+        run: cargo test --all

@@ -14,8 +14,6 @@ use crate::types::{
 pub enum ControllerError {
     #[error("internal server error")]
     Sdk(#[from] SdkError),
-    // #[error("the data for key `{0}` is not available")]
-    // Redaction(String),
 }
 
 #[derive(Clone)]
@@ -25,9 +23,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Configured drift user address
     pub fn user(&self) -> &Pubkey {
         self.wallet.user()
     }
+    /// Configured drift signing address + fee payer
     pub fn authority(&self) -> Pubkey {
         self.wallet.authority()
     }
@@ -52,9 +52,9 @@ impl AppState {
     /// Cancel orders
     ///
     /// There are 3 intended scenarios for cancellation, in order of priority:
-    /// 1) "market" is set cancel all orders in the market
-    /// 2) ids are given cancel all orders by id
-    /// 3) catch all cancel all orders
+    /// 1) "market" is set, cancel all orders in the market
+    /// 2) ids are given, cancel all orders by id
+    /// 3) catch all. cancel all orders
     pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> Result<String, ControllerError> {
         let user_data = self.client.get_account_data(self.user()).await?;
         let builder = TransactionBuilder::new(&self.wallet, &user_data);

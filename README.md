@@ -1,6 +1,6 @@
 # Drift Gateway
 
-Local HTTP server for Drift dex
+Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ## Run
 
@@ -49,7 +49,3 @@ Options:
     }]
 }'
 ```
-
-# TODO:
-- allow server side filter on order and positions queries e.g. by market Id
-- swagger docs?
