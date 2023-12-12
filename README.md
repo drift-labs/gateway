@@ -27,8 +27,9 @@ Options:
   --help            display usage information
 ```
 
-## Example
+## Examples
 
+Place Orders
 ```bash
 ~: curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '{
     "orders": [{
@@ -48,4 +49,9 @@ Options:
         "orderType": "limit"
     }]
 }'
+```
+
+Stream Orderbook
+```
+curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}}'
 ```

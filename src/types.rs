@@ -120,6 +120,8 @@ pub struct PlaceOrder {
     market_type: sdk_types::MarketType,
     amount: i64,
     price: u64,
+    #[serde(default)]
+    user_order_id: u8,
     #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
     order_type: sdk_types::OrderType,
     #[serde(default)]
@@ -173,6 +175,7 @@ impl From<PlaceOrder> for sdk_types::OrderParams {
             } else {
                 PostOnlyParam::None
             },
+            user_order_id: value.user_order_id,
             ..Default::default()
         }
     }
@@ -189,6 +192,12 @@ pub struct Market {
     )]
     /// The market type (Spot or Perp)
     pub market_type: MarketType,
+}
+
+impl Market {
+    pub fn as_market_id(self) -> drift_sdk::types::MarketId {
+        unsafe { std::mem::transmute(self) }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -254,4 +263,12 @@ pub struct CancelOrdersRequest {
     pub market: Option<Market>,
     /// order Ids to cancel
     pub ids: Vec<u32>,
+    /// user assigned order Ids to cancel
+    pub user_ids: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetOrderbookRequest {
+    pub market: Market,
 }

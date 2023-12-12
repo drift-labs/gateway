@@ -1299,7 +1299,7 @@ dependencies = [
 [[package]]
 name = "drift"
 version = "2.48.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#ba1df4ab1adf7b61d37367e26ff7b7adcfbd46b5"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#79f4491e7218430278a9a8b9356b511c2186648d"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1328,15 +1328,17 @@ dependencies = [
  "argh",
  "drift-sdk",
  "env_logger 0.10.1",
+ "futures-util",
  "log",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
 [[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#ba1df4ab1adf7b61d37367e26ff7b7adcfbd46b5"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#79f4491e7218430278a9a8b9356b511c2186648d"
 dependencies = [
  "anchor-lang",
  "drift",

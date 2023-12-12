@@ -7,7 +7,10 @@ use argh::FromArgs;
 use log::{error, info};
 
 use controller::AppState;
-use types::{CancelOrdersRequest, GetOrdersRequest, GetPositionsRequest, PlaceOrdersRequest};
+use types::{
+    CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest, GetPositionsRequest,
+    PlaceOrdersRequest,
+};
 
 mod controller;
 mod types;
@@ -74,6 +77,16 @@ async fn get_positions(
     }
 }
 
+#[get("/orderbooks")]
+async fn get_orderbooks(
+    controller: web::Data<AppState>,
+    req: Json<GetOrderbookRequest>,
+) -> impl Responder {
+    let dlob = controller.stream_orderbook(req.0);
+    // there's no graceful shutdown for the stream: https://github.com/actix/actix-web/issues/1313
+    HttpResponse::Ok().streaming(dlob)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -100,7 +113,8 @@ async fn main() -> std::io::Result<()> {
                 .service(get_positions)
                 .service(get_orders)
                 .service(create_orders)
-                .service(cancel_orders),
+                .service(cancel_orders)
+                .service(get_orderbooks),
         )
     })
     .bind((config.host, config.port))?

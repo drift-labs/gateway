@@ -1,13 +1,18 @@
+use std::task::Poll;
+
+use actix_web::{web::Bytes, Error};
 use drift_sdk::{
+    dlob::{DLOBClient, OrderbookStream},
     types::{Context, MarketType, SdkError},
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
+use futures_util::{Stream, StreamExt};
 use log::error;
 use thiserror::Error;
 
 use crate::types::{
-    AllMarketsResponse, CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse,
-    GetPositionsRequest, GetPositionsResponse, PlaceOrdersRequest,
+    AllMarketsResponse, CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest,
+    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, PlaceOrdersRequest,
 };
 
 #[derive(Error, Debug)]
@@ -20,6 +25,7 @@ pub enum ControllerError {
 pub struct AppState {
     wallet: Wallet,
     client: DriftClient,
+    dlob_client: DLOBClient,
 }
 
 impl AppState {
@@ -46,21 +52,40 @@ impl AppState {
             .subscribe_account(wallet.user())
             .await
             .expect("cache on");
-        Self { wallet, client }
+
+        let dlob_endpoint = if devnet {
+            "https://master.dlob.drift.trade"
+        } else {
+            "https://dlob.drift.trade"
+        };
+        Self {
+            wallet,
+            client,
+            dlob_client: DLOBClient::new(dlob_endpoint),
+        }
     }
 
     /// Cancel orders
     ///
-    /// There are 3 intended scenarios for cancellation, in order of priority:
+    /// There are 4 intended scenarios for cancellation, in order of priority:
     /// 1) "market" is set, cancel all orders in the market
-    /// 2) ids are given, cancel all orders by id
-    /// 3) catch all. cancel all orders
+    /// 2) "user ids" are set, cancel all orders by user assigned id
+    /// 3) ids are given, cancel all orders by id (global, exchange assigned id)
+    /// 4) catch all. cancel all orders
     pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> Result<String, ControllerError> {
         let user_data = self.client.get_account_data(self.user()).await?;
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
         let tx = if let Some(market) = req.market {
             builder.cancel_orders((market.id, market.market_type).into(), None)
+        } else if !req.user_ids.is_empty() {
+            let order_ids = user_data
+                .orders
+                .iter()
+                .filter(|o| o.slot > 0 && req.user_ids.contains(&o.user_order_id))
+                .map(|o| o.order_id)
+                .collect();
+            builder.cancel_orders_by_id(order_ids)
         } else if !req.ids.is_empty() {
             builder.cancel_orders_by_id(req.ids)
         } else {
@@ -148,5 +173,36 @@ impl AppState {
         let signature = self.client.sign_and_send(&self.wallet, tx).await?;
 
         Ok(signature.to_string())
+    }
+
+    pub fn stream_orderbook(&self, req: GetOrderbookRequest) -> DlobStream {
+        let stream = self
+            .dlob_client
+            .subscribe(req.market.as_market_id(), Some(1)); // poll book at 1s interval
+        DlobStream(stream)
+    }
+}
+
+/// Provides JSON serialized orderbook snapshots
+pub struct DlobStream(OrderbookStream);
+impl Stream for DlobStream {
+    type Item = Result<Bytes, Error>;
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        match self.0.poll_next_unpin(cx) {
+            std::task::Poll::Pending => std::task::Poll::Pending,
+            std::task::Poll::Ready(result) => {
+                let result = result.unwrap();
+                if let Err(err) = result {
+                    error!("orderbook stream: {err:?}");
+                    return Poll::Ready(None);
+                }
+
+                let msg = serde_json::to_vec(&result.unwrap()).unwrap();
+                std::task::Poll::Ready(Some(Ok(msg.into())))
+            }
+        }
     }
 }
