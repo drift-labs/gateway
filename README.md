@@ -29,29 +29,88 @@ Options:
 
 ## Examples
 
-Place Orders
+### Get Market Info
+```bash
+~: curl localhost:8080/v2/markets
+```
+
+### Get Orders
+```bash
+~: curl localhost:8080/v2/orders
+```
+
+### Get Positions
+```bash
+~: curl localhost:8080/v2/positions
+```
+
+### Place Orders
 ```bash
 ~: curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '{
     "orders": [{
         "marketId": 1,
         "marketType": "spot",
-        "amount": 100000000,
-        "price": 40000000,
+        "amount": 1.23,
+        "price": 40.55,
         "postOnly": true,
-        "orderType": "limit"
+        "orderType": "limit",
+        "userOrderId": 101
     },
     {
         "marketId": 0,
         "marketType": "perp",
-        "amount": -100000000,
-        "price": 70000000,
+        "amount": -1.05,
+        "price": 80,
+        "postOnly": true,
+        "orderType": "limit",
+        "userOrderId": 102
+    }]
+}'
+```
+
+### Modify Orders
+like place orders but specify either `orderId` or `userOrderId` to indicate which order to modify
+```bash
+~: curl localhost:8080/v2/orders -X PATCH -H 'content-type: application/json' -d '{
+    "orders": [{
+        "marketId": 1,
+        "marketType": "spot",
+        "amount": 1.23,
+        "price": 40.55,
+        "postOnly": true,
+        "orderType": "limit",
+        "userOrderId": 5
+    },
+    {
+        "orderId": 555,
+        "marketId": 0,
+        "marketType": "perp",
+        "amount": -1.05,
+        "price": 80,
         "postOnly": true,
         "orderType": "limit"
     }]
 }'
 ```
 
-Stream Orderbook
+### Cancelling Orders
+```bash
+# cancel by market id
+~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"market":{"id":1,"type":"perp"}}'
+# cancel by order ids
+~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
+# cancel by user assigned order ids
+~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"userIds":[1,2,3,4]}'
+# cancel all
+~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
 ```
-curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}}'
+
+### Stream Orderbook
+```bash
+~: curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}}'
 ```
+
+
+# TODO:
+- return error status for failed txs?
+- allow empty json body on queries

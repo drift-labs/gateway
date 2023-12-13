@@ -3,9 +3,15 @@
 //! - wrappers for presenting drift program types with less implementation detail
 //!
 use drift_sdk::{
-    constants::{PerpMarketConfig, SpotMarketConfig},
-    types::{self as sdk_types, MarketType, OrderParams, PositionDirection, PostOnlyParam},
+    constants::{
+        spot_market_config_by_index, PerpMarketConfig, SpotMarketConfig, BASE_PRECISION,
+        QUOTE_PRECISION as PRICE_PRECISION,
+    },
+    types::{
+        self as sdk_types, Context, MarketType, OrderParams, PositionDirection, PostOnlyParam,
+    },
 };
+use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Serialize, Deserialize)]
@@ -18,21 +24,31 @@ pub struct Order {
         deserialize_with = "market_type_de"
     )]
     market_type: MarketType,
-    amount: i64,
-    price: u64,
+    amount: Decimal,
+    price: Decimal,
     post_only: bool,
     reduce_only: bool,
     user_order_id: u8,
     immediate_or_cancel: bool,
 }
 
-impl From<sdk_types::Order> for Order {
-    fn from(value: sdk_types::Order) -> Self {
+impl Order {
+    pub fn from_sdk_order(value: sdk_types::Order, context: Context) -> Self {
+        let amount = if let MarketType::Perp = value.market_type {
+            Decimal::from_i128_with_scale(value.base_asset_amount as i128, BASE_PRECISION.ilog10())
+        } else {
+            let config =
+                spot_market_config_by_index(context, value.market_index).expect("market exists");
+            Decimal::from_i128_with_scale(
+                value.base_asset_amount as i128,
+                config.precision_exp as u32,
+            )
+        };
         Order {
             market_id: value.market_index,
             market_type: value.market_type,
-            price: value.price,
-            amount: value.base_asset_amount as i64 * (1_i64 - (2 * value.direction as i64)),
+            price: Decimal::from_i128_with_scale(value.price as i128, PRICE_PRECISION.ilog10()),
+            amount,
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
@@ -73,7 +89,7 @@ where
 
 #[derive(Serialize, Deserialize)]
 pub struct SpotPosition {
-    amount: u64,
+    amount: Decimal,
     #[serde(rename = "type")]
     balance_type: String, // deposit or borrow
     market_id: u16,
@@ -82,38 +98,50 @@ pub struct SpotPosition {
 impl From<sdk_types::SpotPosition> for SpotPosition {
     fn from(value: sdk_types::SpotPosition) -> Self {
         Self {
-            amount: value.scaled_balance,
+            amount: Decimal::from_i128_with_scale(
+                value.scaled_balance as i128,
+                BASE_PRECISION.ilog10(),
+            ),
             market_id: value.market_index,
-            balance_type: value.balance_type.to_string(),
+            balance_type: if value.balance_type == Default::default() {
+                "deposit".into()
+            } else {
+                "borrow".into()
+            },
         }
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct PerpPosition {
-    amount: i64,
-    average_entry: u64,
+    amount: Decimal,
+    average_entry: Decimal,
     market_id: u16,
 }
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
+        let amount =
+            Decimal::from_i128_with_scale(value.base_asset_amount.into(), BASE_PRECISION.ilog10());
         Self {
-            amount: value.base_asset_amount,
+            amount,
             market_id: value.market_index,
-            average_entry: (value.quote_entry_amount.abs() / value.base_asset_amount.abs()) as u64,
+            average_entry: Decimal::from_i128_with_scale(
+                (value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1)) as i128,
+                PRICE_PRECISION.ilog10(),
+            ),
         }
     }
 }
 
 pub type ModifyOrdersRequest = PlaceOrdersRequest;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PlaceOrdersRequest {
     pub orders: Vec<PlaceOrder>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaceOrder {
     market_id: u16,
@@ -122,8 +150,8 @@ pub struct PlaceOrder {
         deserialize_with = "market_type_de"
     )]
     market_type: sdk_types::MarketType,
-    amount: i64,
-    price: u64,
+    amount: Decimal,
+    price: Decimal,
     /// 0 indicates it is not set (according to program)
     #[serde(default)]
     pub user_order_id: u8,
@@ -162,27 +190,43 @@ where
     }
 }
 
-impl From<PlaceOrder> for sdk_types::OrderParams {
-    fn from(value: PlaceOrder) -> Self {
+#[inline]
+/// Convert decimal to unsigned fixed-point representation with `target` precision
+fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
+    ((x.mantissa().unsigned_abs() * target as u128) / 10_u128.pow(x.scale())) as u64
+}
+
+impl PlaceOrder {
+    pub fn to_order_params(self, context: Context) -> OrderParams {
+        let target_scale = if let MarketType::Perp = self.market_type {
+            BASE_PRECISION as u32
+        } else {
+            let config =
+                spot_market_config_by_index(context, self.market_id).expect("market exists");
+            config.precision as u32
+        };
+        let base_amount = scale_decimal_to_u64(self.amount, target_scale);
+        let price = scale_decimal_to_u64(self.price, PRICE_PRECISION as u32);
+
         OrderParams {
-            market_index: value.market_id,
-            market_type: value.market_type,
-            order_type: value.order_type,
-            base_asset_amount: value.amount.unsigned_abs(),
-            direction: if value.amount >= 0 {
-                PositionDirection::Long
-            } else {
+            market_index: self.market_id,
+            market_type: self.market_type,
+            order_type: self.order_type,
+            base_asset_amount: base_amount,
+            direction: if self.amount.is_sign_negative() {
                 PositionDirection::Short
+            } else {
+                PositionDirection::Long
             },
-            price: value.price,
-            immediate_or_cancel: value.immediate_or_cancel,
-            reduce_only: value.reduce_only,
-            post_only: if value.post_only {
-                PostOnlyParam::MustPostOnly
+            price,
+            immediate_or_cancel: self.immediate_or_cancel,
+            reduce_only: self.reduce_only,
+            post_only: if self.post_only {
+                PostOnlyParam::TryPostOnly
             } else {
                 PostOnlyParam::None
             },
-            user_order_id: value.user_order_id,
+            user_order_id: self.user_order_id,
             ..Default::default()
         }
     }
@@ -210,12 +254,14 @@ impl Market {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPositionsRequest {
+    #[serde(default)]
     pub market: Option<Market>,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrdersRequest {
+    #[serde(default)]
     pub market: Option<Market>,
 }
 
@@ -267,10 +313,13 @@ pub struct AllMarketsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct CancelOrdersRequest {
     /// Market to cancel orders
+    #[serde(default)]
     pub market: Option<Market>,
     /// order Ids to cancel
+    #[serde(default)]
     pub ids: Vec<u32>,
     /// user assigned order Ids to cancel
+    #[serde(default)]
     pub user_ids: Vec<u8>,
 }
 
@@ -278,4 +327,80 @@ pub struct CancelOrdersRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetOrderbookRequest {
     pub market: Market,
+}
+
+#[cfg(test)]
+mod tests {
+    use drift_sdk::types::{Context, MarketType};
+    use std::str::FromStr;
+
+    use crate::types::Order;
+
+    use super::{Decimal, PlaceOrder};
+
+    #[test]
+    fn place_order_to_order() {
+        let cases = [
+            ("0.1234", 123_400_000_u64),
+            ("123", 123_000_000_000),
+            ("-123.456", 123_456_000_000),
+            ("0.0034", 3_400_000),
+            ("10.0023", 10_002_300_000),
+            ("5.12345678911", 5_123_456_789),
+        ];
+        for (input, expected) in cases {
+            let p = PlaceOrder {
+                amount: Decimal::from_str(input).unwrap(),
+                price: Decimal::from_str(input).unwrap(),
+                market_id: 0,
+                market_type: MarketType::Perp,
+                ..Default::default()
+            };
+            let order_params = p.to_order_params(Context::DevNet);
+            assert_eq!(order_params.base_asset_amount, expected);
+            assert_eq!(
+                order_params.price,
+                expected / 1_000 // 1e9 - 1e6
+            );
+        }
+    }
+
+    #[test]
+    fn place_order_to_order_spot() {
+        let cases = [
+            ("0.1234", 123_400u64, 0_u16),
+            ("123", 12_300_000_000, 1),
+            ("1.23", 12_300_000_000, 1),
+            ("5.123456789", 512_345_678, 4),
+        ];
+        for (input, expected, market_index) in cases {
+            let p = PlaceOrder {
+                amount: Decimal::from_str(input).unwrap(),
+                price: Decimal::from_str(input).unwrap(),
+                market_id: market_index,
+                market_type: MarketType::Spot,
+                ..Default::default()
+            };
+            let order_params = p.to_order_params(Context::MainNet);
+            assert_eq!(order_params.base_asset_amount, expected);
+        }
+    }
+
+    #[test]
+    fn order_from_sdk_order() {
+        let cases = [
+            ("0.1234", 123_400u64, 0_u16),
+            ("123", 12_300_000_000, 1),
+            ("5.123456789", 512_345_678, 4),
+        ];
+        for (input, expected, market_index) in cases {
+            let o = drift_sdk::types::Order {
+                base_asset_amount: 100000000,
+                price: 10000000,
+                ..Default::default()
+            };
+            let gateway_order = Order::from_sdk_order(o, Context::MainNet);
+            // assert_eq!(gateway_order.amount, expected);
+        }
+    }
 }

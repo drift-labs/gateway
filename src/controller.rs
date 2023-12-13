@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::types::{
     AllMarketsResponse, CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest,
-    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest,
+    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest, Order,
     PlaceOrdersRequest,
 };
 
@@ -32,6 +32,10 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Configured program/network context
+    pub fn context(&self) -> Context {
+        self.wallet.context()
+    }
     /// Configured drift user address
     pub fn user(&self) -> &Pubkey {
         self.wallet.user()
@@ -43,9 +47,9 @@ impl AppState {
     pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
         let wallet = Wallet::try_from_str(
             if devnet {
-                Context::Dev
+                Context::DevNet
             } else {
-                Context::Mainnet
+                Context::MainNet
             },
             secret_key,
         )
@@ -80,7 +84,7 @@ impl AppState {
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
         let tx = if let Some(market) = req.market {
-            builder.cancel_orders((market.id, market.market_type).into(), None)
+            builder.cancel_orders((market.id, market.market_type), None)
         } else if !req.user_ids.is_empty() {
             let order_ids = user_data
                 .orders
@@ -125,7 +129,7 @@ impl AppState {
                     if let Some(ref market) = req.market {
                         p.market_index == market.id && MarketType::Perp == market.market_type
                     } else {
-                        true
+                        p.base_asset_amount != 0
                     }
                 })
                 .map(|x| (*x).into())
@@ -149,14 +153,14 @@ impl AppState {
                         true
                     }
                 })
-                .map(Into::into)
+                .map(|o| Order::from_sdk_order(o, self.context()))
                 .collect(),
         })
     }
 
     pub fn get_markets(&self) -> AllMarketsResponse {
-        let spot = drift_sdk::constants::spot_markets(self.wallet.context());
-        let perp = drift_sdk::constants::perp_markets(self.wallet.context());
+        let spot = drift_sdk::constants::spot_market_configs(self.wallet.context());
+        let perp = drift_sdk::constants::perp_market_configs(self.wallet.context());
 
         AllMarketsResponse {
             spot: spot.iter().map(|x| (*x).into()).collect(),
@@ -165,7 +169,11 @@ impl AppState {
     }
 
     pub async fn place_orders(&self, req: PlaceOrdersRequest) -> Result<String, ControllerError> {
-        let orders = req.orders.into_iter().map(Into::into).collect();
+        let orders = req
+            .orders
+            .into_iter()
+            .map(|o| o.to_order_params(self.context()))
+            .collect();
         let tx = TransactionBuilder::new(
             &self.wallet,
             &self.client.get_account_data(self.user()).await?,
@@ -184,14 +192,17 @@ impl AppState {
         let mut params = Vec::<(u32, OrderParams)>::with_capacity(req.orders.len());
         for order in req.orders {
             if let Some(id) = order.order_id {
-                params.push((id, order.into()));
+                params.push((id, order.to_order_params(self.context())));
             } else if order.user_order_id > 0 {
                 if let Some(onchain_order) = user_data
                     .orders
                     .iter()
                     .find(|x| x.user_order_id == order.user_order_id)
                 {
-                    params.push((onchain_order.order_id, order.into()));
+                    params.push((
+                        onchain_order.order_id,
+                        order.to_order_params(self.context()),
+                    ));
                 }
             } else {
                 return Err(ControllerError::UnknownOrderId);
