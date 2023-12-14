@@ -24,12 +24,22 @@ async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
 #[get("/orders")]
 async fn get_orders(
     controller: web::Data<AppState>,
-    req: Json<GetOrdersRequest>,
+    body: actix_web::web::Bytes,
 ) -> impl Responder {
-    match controller.get_orders(req.0).await {
+    let mut req = GetOrdersRequest::default();
+    if body.len() > 0 {
+        match serde_json::from_slice(body.as_ref()) {
+            Ok(deser) => req = deser,
+            Err(err) => {
+                return Either::Left(HttpResponse::BadRequest().message_body(err.to_string()))
+            }
+        }
+    };
+
+    match controller.get_orders(req).await {
         Err(err) => {
             error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError())
+            Either::Left(HttpResponse::InternalServerError().message_body(err.to_string()))
         }
         Ok(payload) => Either::Right(Json(payload)),
     }
@@ -42,6 +52,7 @@ async fn create_orders(
 ) -> impl Responder {
     match controller.place_orders(req.0).await {
         Err(err) => {
+            // TODO: convert into http status code / return error to client
             error!("{err:?}");
             Either::Left(HttpResponse::InternalServerError())
         }
@@ -81,12 +92,22 @@ async fn cancel_orders(
 #[get("/positions")]
 async fn get_positions(
     controller: web::Data<AppState>,
-    req: Json<GetPositionsRequest>,
+    body: actix_web::web::Bytes,
 ) -> impl Responder {
-    match controller.get_positions(req.0).await {
+    let mut req = GetPositionsRequest::default();
+    if body.len() > 0 {
+        match serde_json::from_slice(body.as_ref()) {
+            Ok(deser) => req = deser,
+            Err(err) => {
+                return Either::Left(HttpResponse::BadRequest().message_body(err.to_string()))
+            }
+        }
+    };
+
+    match controller.get_positions(req).await {
         Err(err) => {
             error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError())
+            Either::Left(HttpResponse::InternalServerError().message_body(err.to_string()))
         }
         Ok(payload) => Either::Right(Json(payload)),
     }

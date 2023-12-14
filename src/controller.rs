@@ -1,19 +1,19 @@
-use std::task::Poll;
+use std::{sync::Arc, task::Poll};
 
 use actix_web::{web::Bytes, Error};
 use drift_sdk::{
     dlob::{DLOBClient, OrderbookStream},
-    types::{Context, MarketType, OrderParams, SdkError},
-    DriftClient, Pubkey, TransactionBuilder, Wallet,
+    types::{Context, MarketType, OrderParams, SdkError, SdkResult},
+    DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
-use futures_util::{Stream, StreamExt};
+use futures_util::{stream::FuturesUnordered, Stream, StreamExt};
 use log::error;
 use thiserror::Error;
 
 use crate::types::{
     AllMarketsResponse, CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest,
     GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest, Order,
-    PlaceOrdersRequest,
+    PlaceOrdersRequest, SpotPosition,
 };
 
 #[derive(Error, Debug)]
@@ -27,7 +27,7 @@ pub enum ControllerError {
 #[derive(Clone)]
 pub struct AppState {
     wallet: Wallet,
-    client: DriftClient,
+    client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
 }
 
@@ -54,11 +54,10 @@ impl AppState {
             secret_key,
         )
         .expect("valid key");
-        let client = DriftClient::new(endpoint).await.expect("connects");
-        client
-            .subscribe_account(wallet.user())
+        let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
+        let client = DriftClient::new(endpoint, account_provider)
             .await
-            .expect("cache on");
+            .expect("ok");
 
         let dlob_endpoint = if devnet {
             "https://master.dlob.drift.trade"
@@ -67,7 +66,7 @@ impl AppState {
         };
         Self {
             wallet,
-            client,
+            client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
         }
     }
@@ -80,7 +79,7 @@ impl AppState {
     /// 3) ids are given, cancel all orders by id (global, exchange assigned id)
     /// 4) catch all. cancel all orders
     pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> Result<String, ControllerError> {
-        let user_data = self.client.get_account_data(self.user()).await?;
+        let user_data = self.client.get_user_account(self.user()).await?;
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
         let tx = if let Some(market) = req.market {
@@ -110,9 +109,12 @@ impl AppState {
         &self,
         req: GetPositionsRequest,
     ) -> Result<GetPositionsResponse, ControllerError> {
-        let (spot, perp) = self.client.all_positions(self.user()).await?;
-        Ok(GetPositionsResponse {
-            spot: spot
+        let (all_spot, all_perp) = self.client.all_positions(self.user()).await?;
+
+        // calculating spot token balance requires knowing the 'spot market account' data
+        let mut filtered_spot_positions = Vec::<SpotPosition>::with_capacity(all_spot.len());
+        let mut filtered_spot_futs = FuturesUnordered::from_iter(
+            all_spot
                 .iter()
                 .filter(|p| {
                     if let Some(ref market) = req.market {
@@ -121,15 +123,24 @@ impl AppState {
                         true
                     }
                 })
-                .map(|x| (*x).into())
-                .collect(),
-            perp: perp
+                .map(|x| async {
+                    let spot_market_info = self.client.get_spot_market_info(x.market_index).await?;
+                    SdkResult::Ok(SpotPosition::from_sdk_type(x, &spot_market_info))
+                }),
+        );
+        while let Some(result) = filtered_spot_futs.next().await {
+            filtered_spot_positions.push(result?);
+        }
+
+        Ok(GetPositionsResponse {
+            spot: filtered_spot_positions,
+            perp: all_perp
                 .iter()
                 .filter(|p| {
                     if let Some(ref market) = req.market {
                         p.market_index == market.id && MarketType::Perp == market.market_type
                     } else {
-                        p.base_asset_amount != 0
+                        true
                     }
                 })
                 .map(|x| (*x).into())
@@ -176,7 +187,7 @@ impl AppState {
             .collect();
         let tx = TransactionBuilder::new(
             &self.wallet,
-            &self.client.get_account_data(self.user()).await?,
+            &self.client.get_user_account(self.user()).await?,
         )
         .place_orders(orders)
         .build();
@@ -187,7 +198,7 @@ impl AppState {
     }
 
     pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> Result<String, ControllerError> {
-        let user_data = &self.client.get_account_data(self.user()).await?;
+        let user_data = &self.client.get_user_account(self.user()).await?;
 
         let mut params = Vec::<(u32, OrderParams)>::with_capacity(req.orders.len());
         for order in req.orders {

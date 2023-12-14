@@ -5,7 +5,7 @@
 use drift_sdk::{
     constants::{
         spot_market_config_by_index, PerpMarketConfig, SpotMarketConfig, BASE_PRECISION,
-        QUOTE_PRECISION as PRICE_PRECISION,
+        PRICE_PRECISION,
     },
     types::{
         self as sdk_types, Context, MarketType, OrderParams, PositionDirection, PostOnlyParam,
@@ -95,13 +95,15 @@ pub struct SpotPosition {
     market_id: u16,
 }
 
-impl From<sdk_types::SpotPosition> for SpotPosition {
-    fn from(value: sdk_types::SpotPosition) -> Self {
+impl SpotPosition {
+    pub fn from_sdk_type(
+        value: &sdk_types::SpotPosition,
+        spot_market: &sdk_types::SpotMarket,
+    ) -> Self {
+        // TODO: handle error
+        let token_amount = value.get_token_amount(spot_market).expect("ok");
         Self {
-            amount: Decimal::from_i128_with_scale(
-                value.scaled_balance as i128,
-                BASE_PRECISION.ilog10(),
-            ),
+            amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals),
             market_id: value.market_index,
             balance_type: if value.balance_type == Default::default() {
                 "deposit".into()
@@ -251,14 +253,14 @@ impl Market {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPositionsRequest {
     #[serde(default)]
     pub market: Option<Market>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrdersRequest {
     #[serde(default)]
@@ -369,7 +371,7 @@ mod tests {
     fn place_order_to_order_spot() {
         let cases = [
             ("0.1234", 123_400u64, 0_u16),
-            ("123", 12_300_000_000, 1),
+            ("123", 123_000_000_000, 1),
             ("1.23", 12_300_000_000, 1),
             ("5.123456789", 512_345_678, 4),
         ];

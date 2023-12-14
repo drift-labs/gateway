@@ -31,22 +31,22 @@ Options:
 
 ### Get Market Info
 ```bash
-~: curl localhost:8080/v2/markets
+$> curl localhost:8080/v2/markets
 ```
 
 ### Get Orders
 ```bash
-~: curl localhost:8080/v2/orders
+$> curl localhost:8080/v2/orders
 ```
 
 ### Get Positions
 ```bash
-~: curl localhost:8080/v2/positions
+$> curl localhost:8080/v2/positions
 ```
 
 ### Place Orders
 ```bash
-~: curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '{
+$> curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '{
     "orders": [{
         "marketId": 1,
         "marketType": "spot",
@@ -71,7 +71,7 @@ Options:
 ### Modify Orders
 like place orders but specify either `orderId` or `userOrderId` to indicate which order to modify
 ```bash
-~: curl localhost:8080/v2/orders -X PATCH -H 'content-type: application/json' -d '{
+$> curl localhost:8080/v2/orders -X PATCH -H 'content-type: application/json' -d '{
     "orders": [{
         "marketId": 1,
         "marketType": "spot",
@@ -96,21 +96,47 @@ like place orders but specify either `orderId` or `userOrderId` to indicate whic
 ### Cancelling Orders
 ```bash
 # cancel by market id
-~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"market":{"id":1,"type":"perp"}}'
+$> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"market":{"id":1,"type":"perp"}}'
 # cancel by order ids
-~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
+$> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
 # cancel by user assigned order ids
-~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"userIds":[1,2,3,4]}'
+$> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"userIds":[1,2,3,4]}'
 # cancel all
-~: curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
+$> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
 ```
 
 ### Stream Orderbook
 ```bash
-~: curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}}'
+$> curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}'
 ```
 
-
 # TODO:
-- return error status for failed txs?
-- allow empty json body on queries
+- implement orderbook ws stream
+- parse/return error codes for failed txs
+- integration tests for the endpoints
+```rs
+Sdk(
+    Rpc(
+        ClientError {
+            request: Some(SendTransaction),
+            kind: RpcError(
+                RpcResponseError { code: -32002, message: "Transaction simulation failed: Error processing Instruction 0: custom program error: 0x17b7", data: SendTransactionPreflightFailure(
+                    RpcSimulateTransactionResult {
+                        err: Some(InstructionError(0, Custom(6071))),
+                        logs: Some([
+                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH invoke [1]",
+                            "Program log: Instruction: PlaceOrders",
+                            "Program log: user_order_id is already in use 101",
+                            "Program log: AnchorError occurred. Error Code: UserOrderIdAlreadyInUse. Error Number: 6071. Error Message: User Order Id Already In Use.",
+                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH consumed 15857 of 200000 compute units",
+                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH failed: custom program error: 0x17b7"
+                        ]),
+                        accounts: None,
+                        units_consumed: Some(0),
+                        return_data: None
+                    })
+                })
+        }
+    )
+)
+```
