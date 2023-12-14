@@ -7,6 +7,7 @@ use argh::FromArgs;
 use log::{error, info};
 
 use controller::{AppState, ControllerError};
+use serde_json::json;
 use types::{
     CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest, GetPositionsRequest,
     ModifyOrdersRequest, PlaceOrdersRequest,
@@ -31,18 +32,17 @@ async fn get_orders(
         match serde_json::from_slice(body.as_ref()) {
             Ok(deser) => req = deser,
             Err(err) => {
-                return Either::Left(HttpResponse::BadRequest().message_body(err.to_string()))
+                return Either::Left(HttpResponse::BadRequest().json(json!(
+                    {
+                        "code": 400,
+                        "reason": err.to_string(),
+                    }
+                )))
             }
         }
     };
 
-    match controller.get_orders(req).await {
-        Err(err) => {
-            error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError().message_body(err.to_string()))
-        }
-        Ok(payload) => Either::Right(Json(payload)),
-    }
+    handle_result(controller.get_orders(req).await)
 }
 
 #[post("/orders")]
@@ -50,14 +50,7 @@ async fn create_orders(
     controller: web::Data<AppState>,
     req: Json<PlaceOrdersRequest>,
 ) -> impl Responder {
-    match controller.place_orders(req.0).await {
-        Err(err) => {
-            // TODO: convert into http status code / return error to client
-            error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError())
-        }
-        Ok(payload) => Either::Right(Json(payload)),
-    }
+    handle_result(controller.place_orders(req.0).await)
 }
 
 #[patch("/orders")]
@@ -65,14 +58,7 @@ async fn modify_orders(
     controller: web::Data<AppState>,
     req: Json<ModifyOrdersRequest>,
 ) -> impl Responder {
-    match controller.modify_orders(req.0).await {
-        Err(ControllerError::Sdk(err)) => {
-            error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError())
-        }
-        Err(ControllerError::UnknownOrderId) => Either::Left(HttpResponse::NotFound()),
-        Ok(payload) => Either::Right(Json(payload)),
-    }
+    handle_result(controller.modify_orders(req.0).await)
 }
 
 #[delete("/orders")]
@@ -80,13 +66,7 @@ async fn cancel_orders(
     controller: web::Data<AppState>,
     req: Json<CancelOrdersRequest>,
 ) -> impl Responder {
-    match controller.cancel_orders(req.0).await {
-        Err(err) => {
-            error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError())
-        }
-        Ok(payload) => Either::Right(Json(payload)),
-    }
+    handle_result(controller.cancel_orders(req.0).await)
 }
 
 #[get("/positions")]
@@ -95,22 +75,22 @@ async fn get_positions(
     body: actix_web::web::Bytes,
 ) -> impl Responder {
     let mut req = GetPositionsRequest::default();
+    // handle the body manually to allow empty payload `Json` requires some body is set
     if body.len() > 0 {
         match serde_json::from_slice(body.as_ref()) {
             Ok(deser) => req = deser,
             Err(err) => {
-                return Either::Left(HttpResponse::BadRequest().message_body(err.to_string()))
+                return Either::Left(HttpResponse::BadRequest().json(json!(
+                    {
+                        "code": 400,
+                        "reason": err.to_string(),
+                    }
+                )))
             }
         }
     };
 
-    match controller.get_positions(req).await {
-        Err(err) => {
-            error!("{err:?}");
-            Either::Left(HttpResponse::InternalServerError().message_body(err.to_string()))
-        }
-        Ok(payload) => Either::Right(Json(payload)),
-    }
+    handle_result(controller.get_positions(req).await)
 }
 
 #[get("/orderbooks")]
@@ -174,4 +154,35 @@ struct GatewayConfig {
     /// gateway port
     #[argh(option, default = "8080")]
     port: u16,
+}
+
+fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
+    match result {
+        Ok(payload) => Either::Right(Json(payload)),
+        Err(ControllerError::Sdk(err)) => {
+            error!("{err:?}");
+            Either::Left(HttpResponse::InternalServerError().json(json!(
+                {
+                    "code": 500,
+                    "reason": err.to_string(),
+                }
+            )))
+        }
+        Err(ControllerError::TxFailed { code, reason }) => {
+            Either::Left(HttpResponse::BadRequest().json(json!(
+                {
+                    "code": code,
+                    "reason": reason,
+                }
+            )))
+        }
+        Err(ControllerError::UnknownOrderId(id)) => {
+            Either::Left(HttpResponse::NotFound().json(json!(
+                {
+                    "code": 404,
+                    "reason": format!("order: {id}"),
+                }
+            )))
+        }
+    }
 }

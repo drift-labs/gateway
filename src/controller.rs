@@ -21,7 +21,9 @@ pub enum ControllerError {
     #[error("internal server error")]
     Sdk(#[from] SdkError),
     #[error("order id not found")]
-    UnknownOrderId,
+    UnknownOrderId(u32),
+    #[error("tx failed ({code}): {reason}")]
+    TxFailed { reason: String, code: u32 },
 }
 
 #[derive(Clone)]
@@ -99,9 +101,11 @@ impl AppState {
         }
         .build();
 
-        let signature = self.client.sign_and_send(&self.wallet, tx).await?;
-
-        Ok(signature.to_string())
+        self.client
+            .sign_and_send(&self.wallet, tx)
+            .await
+            .map(|s| s.to_string())
+            .map_err(handle_tx_err)
     }
 
     /// Return orders by position if given, otherwise return all positions
@@ -192,9 +196,11 @@ impl AppState {
         .place_orders(orders)
         .build();
 
-        let signature = self.client.sign_and_send(&self.wallet, tx).await?;
-
-        Ok(signature.to_string())
+        self.client
+            .sign_and_send(&self.wallet, tx)
+            .await
+            .map(|s| s.to_string())
+            .map_err(handle_tx_err)
     }
 
     pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> Result<String, ControllerError> {
@@ -216,7 +222,9 @@ impl AppState {
                     ));
                 }
             } else {
-                return Err(ControllerError::UnknownOrderId);
+                return Err(ControllerError::UnknownOrderId(
+                    order.order_id.unwrap_or(order.user_order_id as u32),
+                ));
             }
         }
 
@@ -224,9 +232,11 @@ impl AppState {
             .modify_orders(params)
             .build();
 
-        let signature = self.client.sign_and_send(&self.wallet, tx).await?;
-
-        Ok(signature.to_string())
+        self.client
+            .sign_and_send(&self.wallet, tx)
+            .await
+            .map(|s| s.to_string())
+            .map_err(handle_tx_err)
     }
 
     pub fn stream_orderbook(&self, req: GetOrderbookRequest) -> DlobStream {
@@ -258,5 +268,16 @@ impl Stream for DlobStream {
                 std::task::Poll::Ready(Some(Ok(msg.into())))
             }
         }
+    }
+}
+
+fn handle_tx_err(err: SdkError) -> ControllerError {
+    if let Some(code) = err.to_anchor_error_code() {
+        ControllerError::TxFailed {
+            reason: code.name(),
+            code: code.into(),
+        }
+    } else {
+        ControllerError::Sdk(err)
     }
 }

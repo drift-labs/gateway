@@ -105,38 +105,33 @@ $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -
 $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
 ```
 
+### Get Positions
+```bash
+ curl localhost:8080/v2/positions | jq .
+ 
+{
+  "spot": [
+    {
+      "amount": "0.400429",
+      "type": "deposit",
+      "market_id": 0
+    },
+    {
+      "amount": "9.531343582",
+      "type": "deposit",
+      "market_id": 1
+    }
+  ],
+  "perp": []
+}
+```
+
 ### Stream Orderbook
 ```bash
 $> curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}'
 ```
 
+
 # TODO:
 - implement orderbook ws stream
-- parse/return error codes for failed txs
 - integration tests for the endpoints
-```rs
-Sdk(
-    Rpc(
-        ClientError {
-            request: Some(SendTransaction),
-            kind: RpcError(
-                RpcResponseError { code: -32002, message: "Transaction simulation failed: Error processing Instruction 0: custom program error: 0x17b7", data: SendTransactionPreflightFailure(
-                    RpcSimulateTransactionResult {
-                        err: Some(InstructionError(0, Custom(6071))),
-                        logs: Some([
-                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH invoke [1]",
-                            "Program log: Instruction: PlaceOrders",
-                            "Program log: user_order_id is already in use 101",
-                            "Program log: AnchorError occurred. Error Code: UserOrderIdAlreadyInUse. Error Number: 6071. Error Message: User Order Id Already In Use.",
-                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH consumed 15857 of 200000 compute units",
-                            "Program dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH failed: custom program error: 0x17b7"
-                        ]),
-                        accounts: None,
-                        units_consumed: Some(0),
-                        return_data: None
-                    })
-                })
-        }
-    )
-)
-```
