@@ -131,7 +131,3 @@ $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
 $> curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}'
 ```
 
-
-# TODO:
-- implement orderbook ws stream
-- integration tests for the endpoints

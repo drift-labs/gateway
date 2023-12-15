@@ -372,7 +372,7 @@ mod tests {
         let cases = [
             ("0.1234", 123_400u64, 0_u16),
             ("123", 123_000_000_000, 1),
-            ("1.23", 12_300_000_000, 1),
+            ("1.23", 1_230_000_000, 1),
             ("5.123456789", 512_345_678, 4),
         ];
         for (input, expected, market_index) in cases {
@@ -391,18 +391,20 @@ mod tests {
     #[test]
     fn order_from_sdk_order() {
         let cases = [
-            ("0.1234", 123_400u64, 0_u16),
-            ("123", 12_300_000_000, 1),
-            ("5.123456789", 512_345_678, 4),
+            (123_4000u64, Decimal::from_str("1.23400").unwrap(), 0_u16),
+            (123_000_000_000, Decimal::from_str("123.0").unwrap(), 1),
+            (512_345_678, Decimal::from_str("5.12345678").unwrap(), 4),
         ];
         for (input, expected, market_index) in cases {
             let o = drift_sdk::types::Order {
-                base_asset_amount: 100000000,
-                price: 10000000,
+                base_asset_amount: input,
+                price: input,
+                market_index,
+                market_type: MarketType::Spot,
                 ..Default::default()
             };
             let gateway_order = Order::from_sdk_order(o, Context::MainNet);
-            // assert_eq!(gateway_order.amount, expected);
+            assert_eq!(gateway_order.amount, expected);
         }
     }
 }
