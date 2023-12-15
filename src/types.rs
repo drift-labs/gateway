@@ -25,33 +25,35 @@ pub struct Order {
     )]
     market_type: MarketType,
     amount: Decimal,
+    filled: Decimal,
     price: Decimal,
     post_only: bool,
     reduce_only: bool,
     user_order_id: u8,
+    order_id: u32,
     immediate_or_cancel: bool,
 }
 
 impl Order {
     pub fn from_sdk_order(value: sdk_types::Order, context: Context) -> Self {
-        let amount = if let MarketType::Perp = value.market_type {
-            Decimal::from_i128_with_scale(value.base_asset_amount as i128, BASE_PRECISION.ilog10())
+        let precision = if let MarketType::Perp = value.market_type {
+            BASE_PRECISION.ilog10()
         } else {
             let config =
                 spot_market_config_by_index(context, value.market_index).expect("market exists");
-            Decimal::from_i128_with_scale(
-                value.base_asset_amount as i128,
-                config.precision_exp as u32,
-            )
+            config.precision_exp as u32
         };
+
         Order {
             market_id: value.market_index,
             market_type: value.market_type,
-            price: Decimal::from_i128_with_scale(value.price as i128, PRICE_PRECISION.ilog10()),
-            amount,
+            price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
+            amount: Decimal::new(value.base_asset_amount as i64, precision),
+            filled: Decimal::new(value.base_asset_amount_filled as i64, precision),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
+            order_id: value.order_id,
             post_only: value.post_only,
             user_order_id: value.user_order_id,
         }
@@ -123,13 +125,12 @@ pub struct PerpPosition {
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
-        let amount =
-            Decimal::from_i128_with_scale(value.base_asset_amount.into(), BASE_PRECISION.ilog10());
+        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
         Self {
             amount,
             market_id: value.market_index,
-            average_entry: Decimal::from_i128_with_scale(
-                (value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1)) as i128,
+            average_entry: Decimal::new(
+                value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1),
                 PRICE_PRECISION.ilog10(),
             ),
         }
@@ -311,7 +312,7 @@ pub struct AllMarketsResponse {
     pub perp: Vec<MarketInfo>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelOrdersRequest {
     /// Market to cancel orders

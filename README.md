@@ -2,16 +2,30 @@
 
 Self hosted API gateway to easily interact with Drift V2 Protocol
 
-## Run
+## Build & Run
 
 ```bash
-export `DRIFT_GATEWAY_KEY=</PATH/TO/KEY | keyBase58>`
+# build
+cargo build --release
 
-# --dev to use devnet markets (default is mainnet)
-# ensure the RPC node is also using the matching dev or mainnet
+# configure the gateway wallet key
+export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
+
+# '--dev' to toggle devnet markets (default is mainnet)
+# ensure the RPC node is also using the matching devnet or mainnet
 drift-gateway --dev  https://api.devnet.solana.com
+
+# or mainnet
+drift-gateway https://api.mainnet-beta.solana.com
 ```
 
+with docker
+```bash
+docker build -f Dockerfile . -t drift-gateway
+docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
+```
+
+## Usage
 ```bash
 Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>]
 
@@ -34,14 +48,33 @@ Options:
 $> curl localhost:8080/v2/markets
 ```
 
+### Get Orderbook
+```bash
+$> curl localhost:8080/v2/orderbook -X GET -H 'content-type: application/json' -d '{"market":{"id":0,"type":"perp"}}'
+```
+to stream orderbooks via websocket DLOB servers are available at:
+devnet: `wss://master.dlob.drift.trade/ws`
+mainnet: `wss://dlob.drift.trade/ws`
+see https://github.com/drift-labs/dlob-server/blob/master/example/wsClient.ts for usage example
+
 ### Get Orders
+get all orders
 ```bash
 $> curl localhost:8080/v2/orders
 ```
+get orders by market
+```bash
+$> curl localhost:8080/v2/orders -X GET -H 'content-type: application/json' -d '{"market":{"id":0,"type":"perp"}};
+```
 
 ### Get Positions
+get all positions
 ```bash
 $> curl localhost:8080/v2/positions
+```
+get positions by market
+```bash
+$> curl localhost:8080/v2/positions -X GET -H 'content-type: application/json' -d '{"market":{"id":0,"type":"perp"}};
 ```
 
 ### Place Orders
@@ -101,33 +134,6 @@ $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -
 $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
 # cancel by user assigned order ids
 $> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"userIds":[1,2,3,4]}'
-# cancel all
-$> curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json'
+# cancel all orders
+$> curl localhost:8080/v2/orders -X DELETE
 ```
-
-### Get Positions
-```bash
- curl localhost:8080/v2/positions | jq .
- 
-{
-  "spot": [
-    {
-      "amount": "0.400429",
-      "type": "deposit",
-      "market_id": 0
-    },
-    {
-      "amount": "9.531343582",
-      "type": "deposit",
-      "market_id": 1
-    }
-  ],
-  "perp": []
-}
-```
-
-### Stream Orderbook
-```bash
-$> curl localhost:8080/v2/orderbooks -N -X GET -H 'content-type: application/json' -d '{"market":{"id":3,"type":"perp"}'
-```
-

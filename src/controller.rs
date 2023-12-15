@@ -1,12 +1,11 @@
-use std::{sync::Arc, task::Poll};
+use std::sync::Arc;
 
-use actix_web::{web::Bytes, Error};
 use drift_sdk::{
-    dlob::{DLOBClient, OrderbookStream},
+    dlob::{DLOBClient, L2Orderbook},
     types::{Context, MarketType, OrderParams, SdkError, SdkResult},
     DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
-use futures_util::{stream::FuturesUnordered, Stream, StreamExt};
+use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::error;
 use thiserror::Error;
 
@@ -15,6 +14,8 @@ use crate::types::{
     GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest, Order,
     PlaceOrdersRequest, SpotPosition,
 };
+
+pub type GatewayResult<T> = Result<T, ControllerError>;
 
 #[derive(Error, Debug)]
 pub enum ControllerError {
@@ -80,7 +81,7 @@ impl AppState {
     /// 2) "user ids" are set, cancel all orders by user assigned id
     /// 3) ids are given, cancel all orders by id (global, exchange assigned id)
     /// 4) catch all. cancel all orders
-    pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> Result<String, ControllerError> {
+    pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> GatewayResult<String> {
         let user_data = self.client.get_user_account(self.user()).await?;
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
@@ -112,7 +113,7 @@ impl AppState {
     pub async fn get_positions(
         &self,
         req: GetPositionsRequest,
-    ) -> Result<GetPositionsResponse, ControllerError> {
+    ) -> GatewayResult<GetPositionsResponse> {
         let (all_spot, all_perp) = self.client.all_positions(self.user()).await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
@@ -153,10 +154,7 @@ impl AppState {
     }
 
     /// Return orders by market if given, otherwise return all orders
-    pub async fn get_orders(
-        &self,
-        req: GetOrdersRequest,
-    ) -> Result<GetOrdersResponse, ControllerError> {
+    pub async fn get_orders(&self, req: GetOrdersRequest) -> GatewayResult<GetOrdersResponse> {
         let orders = self.client.all_orders(self.user()).await?;
         Ok(GetOrdersResponse {
             orders: orders
@@ -183,7 +181,7 @@ impl AppState {
         }
     }
 
-    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> Result<String, ControllerError> {
+    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> GatewayResult<String> {
         let orders = req
             .orders
             .into_iter()
@@ -203,7 +201,7 @@ impl AppState {
             .map_err(handle_tx_err)
     }
 
-    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> Result<String, ControllerError> {
+    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> GatewayResult<String> {
         let user_data = &self.client.get_user_account(self.user()).await?;
 
         let mut params = Vec::<(u32, OrderParams)>::with_capacity(req.orders.len());
@@ -239,35 +237,9 @@ impl AppState {
             .map_err(handle_tx_err)
     }
 
-    pub fn stream_orderbook(&self, req: GetOrderbookRequest) -> DlobStream {
-        let stream = self
-            .dlob_client
-            .subscribe(req.market.as_market_id(), Some(1)); // poll book at 1s interval
-        DlobStream(stream)
-    }
-}
-
-/// Provides JSON serialized orderbook snapshots
-pub struct DlobStream(OrderbookStream);
-impl Stream for DlobStream {
-    type Item = Result<Bytes, Error>;
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        match self.0.poll_next_unpin(cx) {
-            std::task::Poll::Pending => std::task::Poll::Pending,
-            std::task::Poll::Ready(result) => {
-                let result = result.unwrap();
-                if let Err(err) = result {
-                    error!("orderbook stream: {err:?}");
-                    return Poll::Ready(None);
-                }
-
-                let msg = serde_json::to_vec(&result.unwrap()).unwrap();
-                std::task::Poll::Ready(Some(Ok(msg.into())))
-            }
-        }
+    pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<L2Orderbook> {
+        let book = self.dlob_client.get_l2(req.market.as_market_id()).await;
+        Ok(book?)
     }
 }
 

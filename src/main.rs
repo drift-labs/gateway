@@ -28,7 +28,7 @@ async fn get_orders(
     body: actix_web::web::Bytes,
 ) -> impl Responder {
     let mut req = GetOrdersRequest::default();
-    if body.len() > 0 {
+    if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
             Ok(deser) => req = deser,
             Err(err) => {
@@ -64,9 +64,23 @@ async fn modify_orders(
 #[delete("/orders")]
 async fn cancel_orders(
     controller: web::Data<AppState>,
-    req: Json<CancelOrdersRequest>,
+    body: actix_web::web::Bytes,
 ) -> impl Responder {
-    handle_result(controller.cancel_orders(req.0).await)
+    let mut req = CancelOrdersRequest::default();
+    if !body.is_empty() {
+        match serde_json::from_slice(body.as_ref()) {
+            Ok(deser) => req = deser,
+            Err(err) => {
+                return Either::Left(HttpResponse::BadRequest().json(json!(
+                    {
+                        "code": 400,
+                        "reason": err.to_string(),
+                    }
+                )))
+            }
+        }
+    };
+    handle_result(controller.cancel_orders(req).await)
 }
 
 #[get("/positions")]
@@ -76,7 +90,7 @@ async fn get_positions(
 ) -> impl Responder {
     let mut req = GetPositionsRequest::default();
     // handle the body manually to allow empty payload `Json` requires some body is set
-    if body.len() > 0 {
+    if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
             Ok(deser) => req = deser,
             Err(err) => {
@@ -93,14 +107,13 @@ async fn get_positions(
     handle_result(controller.get_positions(req).await)
 }
 
-#[get("/orderbooks")]
-async fn get_orderbooks(
+#[get("/orderbook")]
+async fn get_orderbook(
     controller: web::Data<AppState>,
     req: Json<GetOrderbookRequest>,
 ) -> impl Responder {
-    let dlob = controller.stream_orderbook(req.0);
-    // there's no graceful shutdown for the stream: https://github.com/actix/actix-web/issues/1313
-    HttpResponse::Ok().streaming(dlob)
+    let book = controller.get_orderbook(req.0).await;
+    handle_result(book)
 }
 
 #[actix_web::main]
@@ -131,7 +144,7 @@ async fn main() -> std::io::Result<()> {
                 .service(create_orders)
                 .service(cancel_orders)
                 .service(modify_orders)
-                .service(get_orderbooks),
+                .service(get_orderbook),
         )
     })
     .bind((config.host, config.port))?
