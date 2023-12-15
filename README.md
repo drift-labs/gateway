@@ -173,6 +173,7 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
         }]
     }
 }'
+```
 
 ### Errors
 error responses have the following JSON structure:
