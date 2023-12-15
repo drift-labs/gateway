@@ -43,6 +43,8 @@ Options:
 
 ## API Examples
 
+Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
+
 ### Get Market Info
 ```bash
 $ curl localhost:8080/v2/markets
@@ -110,6 +112,7 @@ $ curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '
     }]
 }'
 ```
+Returns solana tx signature on success
 
 ### Modify Orders
 like place orders but caller must specify either `orderId` or `userOrderId` to indicate which order to modify.
@@ -130,6 +133,7 @@ $ curl localhost:8080/v2/orders -X PATCH -H 'content-type: application/json' -d 
     }]
 }'
 ```
+Returns solana tx signature on success
 
 ### Cancel Orders
 ```bash
@@ -142,6 +146,33 @@ $ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d
 # cancel all orders
 $ curl localhost:8080/v2/orders -X DELETE
 ```
+Returns solana tx signature on success
+
+### Cancel and Place Orders
+
+Atomically cancel then place orders without possible downtime.
+Request format is an embedded cancel and place request
+
+```bash
+$ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: application/json' -d '{
+    "cancel": {
+        "marketIndex": 0,
+        "marketType": "perp"
+    },
+    "place": {
+        "orders": [
+        {
+            "marketIndex": 0,
+            "marketType": "perp",
+            "amount": -1.23,
+            "price": 80.0,
+            "postOnly": true,
+            "orderType": "limit",
+            "immediateOrCancel": false,
+            "reduce_only": false
+        }]
+    }
+}'
 
 ### Errors
 error responses have the following JSON structure:

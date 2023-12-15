@@ -8,7 +8,10 @@ use log::{error, info};
 
 use controller::{AppState, ControllerError};
 use serde_json::json;
-use types::{CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest, PlaceOrdersRequest};
+use types::{
+    CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest,
+    PlaceOrdersRequest,
+};
 
 mod controller;
 mod types;
@@ -61,6 +64,17 @@ async fn cancel_orders(controller: web::Data<AppState>, body: web::Bytes) -> imp
     handle_result(controller.cancel_orders(req).await)
 }
 
+#[post("/orders/cancelAndPlace")]
+async fn cancel_and_place_orders(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+) -> impl Responder {
+    match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
+        Ok(req) => handle_result(controller.cancel_and_place_orders(req).await),
+        Err(err) => handle_deser_error(err),
+    }
+}
+
 #[get("/positions")]
 async fn get_positions(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
     let mut req = None;
@@ -111,7 +125,8 @@ async fn main() -> std::io::Result<()> {
                 .service(create_orders)
                 .service(cancel_orders)
                 .service(modify_orders)
-                .service(get_orderbook),
+                .service(get_orderbook)
+                .service(cancel_and_place_orders),
         )
     })
     .bind((config.host, config.port))?
@@ -174,4 +189,25 @@ fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>
             "reason": err.to_string(),
         }
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{http::header::ContentType, test, App};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn get_orders_works() {
+        let controller = AppState::new("test", "example.com", true).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_orders),
+        )
+        .await;
+        let req = test::TestRequest::default().to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
 }

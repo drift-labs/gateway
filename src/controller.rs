@@ -10,9 +10,9 @@ use log::error;
 use thiserror::Error;
 
 use crate::types::{
-    AllMarketsResponse, CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest,
-    GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, ModifyOrdersRequest, Order,
-    PlaceOrdersRequest, SpotPosition,
+    AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest,
+    GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse,
+    ModifyOrdersRequest, Order, PlaceOrdersRequest, SpotPosition, TxResponse,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -82,7 +82,7 @@ impl AppState {
     /// 2) "user ids" are set, cancel all orders by user assigned id
     /// 3) ids are given, cancel all orders by id (global, exchange assigned id)
     /// 4) catch all. cancel all orders
-    pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> GatewayResult<String> {
+    pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> GatewayResult<TxResponse> {
         let user_data = self.client.get_user_account(self.user()).await?;
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
@@ -106,7 +106,7 @@ impl AppState {
         self.client
             .sign_and_send(&self.wallet, tx)
             .await
-            .map(|s| s.to_string())
+            .map(|s| TxResponse::new(s.to_string()))
             .map_err(handle_tx_err)
     }
 
@@ -187,7 +187,46 @@ impl AppState {
         }
     }
 
-    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> GatewayResult<String> {
+    pub async fn cancel_and_place_orders(
+        &self,
+        req: CancelAndPlaceRequest,
+    ) -> GatewayResult<TxResponse> {
+        let orders = req
+            .place
+            .orders
+            .into_iter()
+            .map(|o| o.to_order_params(self.context()))
+            .collect();
+
+        let user_data = self.client.get_user_account(self.user()).await?;
+        let builder = TransactionBuilder::new(&self.wallet, &user_data);
+
+        let tx = if let Some(market) = req.cancel.market {
+            builder.cancel_orders((market.market_index, market.market_type), None)
+        } else if !req.cancel.user_ids.is_empty() {
+            let order_ids = user_data
+                .orders
+                .iter()
+                .filter(|o| o.slot > 0 && req.cancel.user_ids.contains(&o.user_order_id))
+                .map(|o| o.order_id)
+                .collect();
+            builder.cancel_orders_by_id(order_ids)
+        } else if !req.cancel.ids.is_empty() {
+            builder.cancel_orders_by_id(req.cancel.ids)
+        } else {
+            builder.cancel_all_orders()
+        }
+        .place_orders(orders)
+        .build();
+
+        self.client
+            .sign_and_send(&self.wallet, tx)
+            .await
+            .map(|s| TxResponse::new(s.to_string()))
+            .map_err(handle_tx_err)
+    }
+
+    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> GatewayResult<TxResponse> {
         let orders = req
             .orders
             .into_iter()
@@ -203,11 +242,11 @@ impl AppState {
         self.client
             .sign_and_send(&self.wallet, tx)
             .await
-            .map(|s| s.to_string())
+            .map(|s| TxResponse::new(s.to_string()))
             .map_err(handle_tx_err)
     }
 
-    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> GatewayResult<String> {
+    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> GatewayResult<TxResponse> {
         let user_data = &self.client.get_user_account(self.user()).await?;
         // NB: its possible to let the drift program sort the modifications by userOrderId
         // sorting it client side for simplicity
@@ -257,7 +296,7 @@ impl AppState {
         self.client
             .sign_and_send(&self.wallet, tx)
             .await
-            .map(|s| s.to_string())
+            .map(|s| TxResponse::new(s.to_string()))
             .map_err(handle_tx_err)
     }
 

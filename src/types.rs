@@ -408,6 +408,23 @@ pub struct GetOrderbookRequest {
     pub market: Market,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct TxResponse {
+    tx: String,
+}
+
+impl TxResponse {
+    pub fn new(tx_signature: String) -> Self {
+        Self { tx: tx_signature }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CancelAndPlaceRequest {
+    pub cancel: CancelOrdersRequest,
+    pub place: PlaceOrdersRequest,
+}
+
 #[cfg(test)]
 mod tests {
     use drift_sdk::types::{Context, MarketType, PositionDirection};
