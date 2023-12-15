@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use drift_sdk::{
     dlob::{DLOBClient, L2Orderbook},
-    types::{Context, MarketType, OrderParams, SdkError, SdkResult},
+    types::{Context, MarketType, ModifyOrderParams, SdkError, SdkResult},
     DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
@@ -67,6 +67,7 @@ impl AppState {
         } else {
             "https://dlob.drift.trade"
         };
+
         Self {
             wallet,
             client: Arc::new(client),
@@ -86,7 +87,7 @@ impl AppState {
         let builder = TransactionBuilder::new(&self.wallet, &user_data);
 
         let tx = if let Some(market) = req.market {
-            builder.cancel_orders((market.id, market.market_type), None)
+            builder.cancel_orders((market.market_index, market.market_type), None)
         } else if !req.user_ids.is_empty() {
             let order_ids = user_data
                 .orders
@@ -112,7 +113,7 @@ impl AppState {
     /// Return orders by position if given, otherwise return all positions
     pub async fn get_positions(
         &self,
-        req: GetPositionsRequest,
+        req: Option<GetPositionsRequest>,
     ) -> GatewayResult<GetPositionsResponse> {
         let (all_spot, all_perp) = self.client.all_positions(self.user()).await?;
 
@@ -122,8 +123,9 @@ impl AppState {
             all_spot
                 .iter()
                 .filter(|p| {
-                    if let Some(ref market) = req.market {
-                        p.market_index == market.id && MarketType::Spot == market.market_type
+                    if let Some(GetPositionsRequest { ref market }) = req {
+                        p.market_index == market.market_index
+                            && MarketType::Spot == market.market_type
                     } else {
                         true
                     }
@@ -142,8 +144,9 @@ impl AppState {
             perp: all_perp
                 .iter()
                 .filter(|p| {
-                    if let Some(ref market) = req.market {
-                        p.market_index == market.id && MarketType::Perp == market.market_type
+                    if let Some(GetPositionsRequest { ref market }) = req {
+                        p.market_index == market.market_index
+                            && MarketType::Perp == market.market_type
                     } else {
                         true
                     }
@@ -154,14 +157,17 @@ impl AppState {
     }
 
     /// Return orders by market if given, otherwise return all orders
-    pub async fn get_orders(&self, req: GetOrdersRequest) -> GatewayResult<GetOrdersResponse> {
+    pub async fn get_orders(
+        &self,
+        req: Option<GetOrdersRequest>,
+    ) -> GatewayResult<GetOrdersResponse> {
         let orders = self.client.all_orders(self.user()).await?;
         Ok(GetOrdersResponse {
             orders: orders
                 .into_iter()
                 .filter(|o| {
-                    if let Some(ref market) = req.market {
-                        o.market_index == market.id && o.market_type == market.market_type
+                    if let Some(GetOrdersRequest { ref market }) = req {
+                        o.market_index == market.market_index && o.market_type == market.market_type
                     } else {
                         true
                     }
@@ -203,25 +209,43 @@ impl AppState {
 
     pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> GatewayResult<String> {
         let user_data = &self.client.get_user_account(self.user()).await?;
-
-        let mut params = Vec::<(u32, OrderParams)>::with_capacity(req.orders.len());
+        // NB: its possible to let the drift program sort the modifications by userOrderId
+        // sorting it client side for simplicity
+        let mut params = Vec::<(u32, ModifyOrderParams)>::with_capacity(req.orders.len());
         for order in req.orders {
-            if let Some(id) = order.order_id {
-                params.push((id, order.to_order_params(self.context())));
-            } else if order.user_order_id > 0 {
+            if let Some(order_id) = order.order_id {
+                if let Some(onchain_order) =
+                    user_data.orders.iter().find(|x| x.order_id == order_id)
+                {
+                    params.push((
+                        order_id,
+                        order.to_order_params(
+                            onchain_order.market_index,
+                            onchain_order.market_type,
+                            self.context(),
+                        ),
+                    ));
+                }
+            } else if let Some(user_order_id) = order.user_order_id {
                 if let Some(onchain_order) = user_data
                     .orders
                     .iter()
-                    .find(|x| x.user_order_id == order.user_order_id)
+                    .find(|x| x.user_order_id == user_order_id)
                 {
                     params.push((
                         onchain_order.order_id,
-                        order.to_order_params(self.context()),
+                        order.to_order_params(
+                            onchain_order.market_index,
+                            onchain_order.market_type,
+                            self.context(),
+                        ),
                     ));
                 }
             } else {
                 return Err(ControllerError::UnknownOrderId(
-                    order.order_id.unwrap_or(order.user_order_id as u32),
+                    order
+                        .order_id
+                        .unwrap_or(order.user_order_id.unwrap_or(0) as u32),
                 ));
             }
         }

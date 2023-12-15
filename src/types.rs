@@ -8,7 +8,8 @@ use drift_sdk::{
         PRICE_PRECISION,
     },
     types::{
-        self as sdk_types, Context, MarketType, OrderParams, PositionDirection, PostOnlyParam,
+        self as sdk_types, Context, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
+        PostOnlyParam,
     },
 };
 use rust_decimal::Decimal;
@@ -44,11 +45,15 @@ impl Order {
             config.precision_exp as u32
         };
 
+        // 0 = long
+        // 1 = short
+        let to_sign = 1_i64 - 2 * (value.direction as i64);
+
         Order {
             market_id: value.market_index,
             market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
-            amount: Decimal::new(value.base_asset_amount as i64, precision),
+            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, precision),
             filled: Decimal::new(value.base_asset_amount_filled as i64, precision),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
@@ -137,30 +142,87 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
     }
 }
 
-pub type ModifyOrdersRequest = PlaceOrdersRequest;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ModifyOrdersRequest {
+    pub orders: Vec<ModifyOrder>,
+}
+
+#[cfg_attr(test, derive(Default))]
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ModifyOrder {
+    amount: Option<Decimal>,
+    price: Option<Decimal>,
+    pub user_order_id: Option<u8>,
+    pub order_id: Option<u32>,
+    pub reduce_only: Option<bool>,
+}
+
+impl ModifyOrder {
+    pub fn to_order_params(
+        self,
+        market_index: u16,
+        market_type: MarketType,
+        context: Context,
+    ) -> ModifyOrderParams {
+        let target_scale = if let MarketType::Perp = market_type {
+            BASE_PRECISION as u32
+        } else {
+            let config = spot_market_config_by_index(context, market_index).expect("market exists");
+            config.precision as u32
+        };
+
+        let (amount, direction) = if let Some(base_amount) = self.amount {
+            let direction = if base_amount.is_sign_negative() {
+                PositionDirection::Short
+            } else {
+                PositionDirection::Long
+            };
+            (
+                Some(scale_decimal_to_u64(base_amount.abs(), target_scale)),
+                Some(direction),
+            )
+        } else {
+            (None, None)
+        };
+
+        let price = if let Some(price) = self.price {
+            Some(scale_decimal_to_u64(price, PRICE_PRECISION as u32))
+        } else {
+            None
+        };
+
+        ModifyOrderParams {
+            base_asset_amount: amount,
+            direction,
+            price,
+            reduce_only: self.reduce_only,
+            ..Default::default()
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PlaceOrdersRequest {
     pub orders: Vec<PlaceOrder>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(test, derive(Default))]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaceOrder {
-    market_id: u16,
-    #[serde(
-        serialize_with = "market_type_ser",
-        deserialize_with = "market_type_de"
-    )]
-    market_type: sdk_types::MarketType,
+    #[serde(flatten)]
+    market: Market,
     amount: Decimal,
     price: Decimal,
     /// 0 indicates it is not set (according to program)
     #[serde(default)]
     pub user_order_id: u8,
-    /// only used for modify orders
-    pub order_id: Option<u32>,
-    #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
+    #[serde(
+        serialize_with = "order_type_ser",
+        deserialize_with = "order_type_de",
+        default
+    )]
     order_type: sdk_types::OrderType,
     #[serde(default)]
     post_only: bool,
@@ -201,19 +263,19 @@ fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
 
 impl PlaceOrder {
     pub fn to_order_params(self, context: Context) -> OrderParams {
-        let target_scale = if let MarketType::Perp = self.market_type {
+        let target_scale = if let MarketType::Perp = self.market.market_type {
             BASE_PRECISION as u32
         } else {
-            let config =
-                spot_market_config_by_index(context, self.market_id).expect("market exists");
+            let config = spot_market_config_by_index(context, self.market.market_index)
+                .expect("market exists");
             config.precision as u32
         };
-        let base_amount = scale_decimal_to_u64(self.amount, target_scale);
+        let base_amount = scale_decimal_to_u64(self.amount.abs(), target_scale);
         let price = scale_decimal_to_u64(self.price, PRICE_PRECISION as u32);
 
         OrderParams {
-            market_index: self.market_id,
-            market_type: self.market_type,
+            market_index: self.market.market_index,
+            market_type: self.market.market_type,
             order_type: self.order_type,
             base_asset_amount: base_amount,
             direction: if self.amount.is_sign_negative() {
@@ -235,12 +297,13 @@ impl PlaceOrder {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Default))]
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Market {
     /// The market index
-    pub id: u16,
+    pub market_index: u16,
     #[serde(
-        rename = "type",
         serialize_with = "market_type_ser",
         deserialize_with = "market_type_de"
     )]
@@ -249,23 +312,35 @@ pub struct Market {
 }
 
 impl Market {
+    pub fn spot(index: u16) -> Self {
+        Self {
+            market_index: index,
+            market_type: MarketType::Spot,
+        }
+    }
+    pub fn perp(index: u16) -> Self {
+        Self {
+            market_index: index,
+            market_type: MarketType::Perp,
+        }
+    }
     pub fn as_market_id(self) -> drift_sdk::types::MarketId {
         unsafe { std::mem::transmute(self) }
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPositionsRequest {
-    #[serde(default)]
-    pub market: Option<Market>,
+    #[serde(flatten)]
+    pub market: Market,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrdersRequest {
-    #[serde(default)]
-    pub market: Option<Market>,
+    #[serde(flatten)]
+    pub market: Market,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -316,7 +391,7 @@ pub struct AllMarketsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct CancelOrdersRequest {
     /// Market to cancel orders
-    #[serde(default)]
+    #[serde(flatten, default)]
     pub market: Option<Market>,
     /// order Ids to cancel
     #[serde(default)]
@@ -329,6 +404,7 @@ pub struct CancelOrdersRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrderbookRequest {
+    #[serde(flatten)]
     pub market: Market,
 }
 
@@ -337,7 +413,7 @@ mod tests {
     use drift_sdk::types::{Context, MarketType};
     use std::str::FromStr;
 
-    use crate::types::Order;
+    use crate::types::{Market, Order};
 
     use super::{Decimal, PlaceOrder};
 
@@ -355,8 +431,7 @@ mod tests {
             let p = PlaceOrder {
                 amount: Decimal::from_str(input).unwrap(),
                 price: Decimal::from_str(input).unwrap(),
-                market_id: 0,
-                market_type: MarketType::Perp,
+                market: Market::perp(0),
                 ..Default::default()
             };
             let order_params = p.to_order_params(Context::DevNet);
@@ -380,8 +455,7 @@ mod tests {
             let p = PlaceOrder {
                 amount: Decimal::from_str(input).unwrap(),
                 price: Decimal::from_str(input).unwrap(),
-                market_id: market_index,
-                market_type: MarketType::Spot,
+                market: Market::spot(market_index),
                 ..Default::default()
             };
             let order_params = p.to_order_params(Context::MainNet);
@@ -401,7 +475,7 @@ mod tests {
                 base_asset_amount: input,
                 price: input,
                 market_index,
-                market_type: MarketType::Spot,
+                market_type: MarketType::Perp,
                 ..Default::default()
             };
             let gateway_order = Order::from_sdk_order(o, Context::MainNet);

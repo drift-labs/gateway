@@ -8,10 +8,7 @@ use log::{error, info};
 
 use controller::{AppState, ControllerError};
 use serde_json::json;
-use types::{
-    CancelOrdersRequest, GetOrderbookRequest, GetOrdersRequest, GetPositionsRequest,
-    ModifyOrdersRequest, PlaceOrdersRequest,
-};
+use types::{CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest, PlaceOrdersRequest};
 
 mod controller;
 mod types;
@@ -23,22 +20,12 @@ async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
 }
 
 #[get("/orders")]
-async fn get_orders(
-    controller: web::Data<AppState>,
-    body: actix_web::web::Bytes,
-) -> impl Responder {
-    let mut req = GetOrdersRequest::default();
+async fn get_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+    let mut req = None;
     if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
-            Ok(deser) => req = deser,
-            Err(err) => {
-                return Either::Left(HttpResponse::BadRequest().json(json!(
-                    {
-                        "code": 400,
-                        "reason": err.to_string(),
-                    }
-                )))
-            }
+            Ok(deser) => req = Some(deser),
+            Err(err) => return handle_deser_error(err),
         }
     };
 
@@ -46,61 +33,42 @@ async fn get_orders(
 }
 
 #[post("/orders")]
-async fn create_orders(
-    controller: web::Data<AppState>,
-    req: Json<PlaceOrdersRequest>,
-) -> impl Responder {
-    handle_result(controller.place_orders(req.0).await)
+async fn create_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+    match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
+        Ok(req) => handle_result(controller.place_orders(req).await),
+        Err(err) => handle_deser_error(err),
+    }
 }
 
 #[patch("/orders")]
-async fn modify_orders(
-    controller: web::Data<AppState>,
-    req: Json<ModifyOrdersRequest>,
-) -> impl Responder {
-    handle_result(controller.modify_orders(req.0).await)
+async fn modify_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+    match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
+        Ok(req) => handle_result(controller.modify_orders(req).await),
+        Err(err) => handle_deser_error(err),
+    }
 }
 
 #[delete("/orders")]
-async fn cancel_orders(
-    controller: web::Data<AppState>,
-    body: actix_web::web::Bytes,
-) -> impl Responder {
+async fn cancel_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
     let mut req = CancelOrdersRequest::default();
+    // handle the body manually to allow empty payload `Json` requires some body is set
     if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
             Ok(deser) => req = deser,
-            Err(err) => {
-                return Either::Left(HttpResponse::BadRequest().json(json!(
-                    {
-                        "code": 400,
-                        "reason": err.to_string(),
-                    }
-                )))
-            }
+            Err(err) => return handle_deser_error(err),
         }
     };
     handle_result(controller.cancel_orders(req).await)
 }
 
 #[get("/positions")]
-async fn get_positions(
-    controller: web::Data<AppState>,
-    body: actix_web::web::Bytes,
-) -> impl Responder {
-    let mut req = GetPositionsRequest::default();
+async fn get_positions(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+    let mut req = None;
     // handle the body manually to allow empty payload `Json` requires some body is set
     if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
-            Ok(deser) => req = deser,
-            Err(err) => {
-                return Either::Left(HttpResponse::BadRequest().json(json!(
-                    {
-                        "code": 400,
-                        "reason": err.to_string(),
-                    }
-                )))
-            }
+            Ok(deser) => req = Some(deser),
+            Err(err) => return handle_deser_error(err),
         }
     };
 
@@ -108,12 +76,11 @@ async fn get_positions(
 }
 
 #[get("/orderbook")]
-async fn get_orderbook(
-    controller: web::Data<AppState>,
-    req: Json<GetOrderbookRequest>,
-) -> impl Responder {
-    let book = controller.get_orderbook(req.0).await;
-    handle_result(book)
+async fn get_orderbook(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+    match serde_json::from_slice::<'_, GetOrderbookRequest>(body.as_ref()) {
+        Ok(req) => handle_result(controller.get_orderbook(req).await),
+        Err(err) => handle_deser_error(err),
+    }
 }
 
 #[actix_web::main]
@@ -198,4 +165,13 @@ fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, 
             )))
         }
     }
+}
+
+fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>> {
+    Either::Left(HttpResponse::BadRequest().json(json!(
+        {
+            "code": 400,
+            "reason": err.to_string(),
+        }
+    )))
 }
