@@ -75,8 +75,13 @@ $ curl localhost:8080/v2/markets
 
 ### Get Orderbook
 gets a full snapshot of the current orderbook for a given market
+
+- `marketType` - "spot" or "perp
+
 ```bash
-$ curl localhost:8080/v2/orderbook -X GET -H 'content-type: application/json' -d '{"marketIndex":0,"marketType":"perp"}'
+$ curl localhost:8080/v2/orderbook -X GET \
+  -H 'content-type: application/json' \
+  -d '{"marketIndex":0,"marketType":"perp"}'
 ```
 
 **Response**
@@ -113,6 +118,7 @@ $ curl localhost:8080/v2/orderbook -X GET -H 'content-type: application/json' -d
 to stream orderbooks via websocket public DLOB servers are available at:
 - devnet: `wss://master.dlob.drift.trade/ws`
 - mainnet: `wss://dlob.drift.trade/ws`
+
 see https://github.com/drift-labs/dlob-server/blob/master/example/wsClient.ts for usage example
 
 ### Get Orders
@@ -122,7 +128,10 @@ $ curl localhost:8080/v2/orders
 ```
 get orders by market
 ```bash
-$ curl localhost:8080/v2/orders -X GET -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}'
+$ curl -X GET \
+  -H 'content-type: application/json' \
+  -d '{"marketIndex":1,"marketType":"spot"}' \
+  localhost:8080/v2/orders
 ```
 
 **Response**
@@ -166,9 +175,13 @@ $ curl localhost:8080/v2/positions
 ```
 get positions by market
 ```bash
-$ curl localhost:8080/v2/positions -X GET -H 'content-type: application/json' -d '{"marketIndex":0,"marketType":"perp"}'
+$ curl -X GET \
+  -H 'content-type: application/json' \
+  -d '{"marketIndex":0,"marketType":"perp"} \
+localhost:8080/v2/positions
 ```
 
+**Response**
 ```json
 {
   "spot": [
@@ -194,7 +207,9 @@ $ curl localhost:8080/v2/positions -X GET -H 'content-type: application/json' -d
 - `orderType` only "limit" and "market" options are fully supported by the gateway
 
 ```bash
-$ curl localhost:8080/v2/orders -X POST -H 'content-type: application/json' -d '{
+$ curl localhost:8080/v2/orders -X POST \
+-H 'content-type: application/json' \
+-d '{
     "orders": [
     {
         "marketIndex": 1,
@@ -226,7 +241,9 @@ like place orders but caller must specify either `orderId` or `userOrderId` to i
 - `amount` can be modified to flip the order from long/short to bid/ask
 - the order market cannot be modified.
 ```bash
-$ curl localhost:8080/v2/orders -X PATCH -H 'content-type: application/json' -d '{
+$ curl localhost:8080/v2/orders -X PATCH \
+-H 'content-type: application/json' \
+-d '{
     "orders": [{
         "amount": -1.1,
         "price": 80.5,
@@ -260,7 +277,8 @@ Atomically cancel then place orders without possible downtime.
 Request format is an embedded cancel and place request
 
 ```bash
-$ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: application/json' -d '{
+$ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: application/json' \
+-d '{
     "cancel": {
         "marketIndex": 0,
         "marketType": "perp"
