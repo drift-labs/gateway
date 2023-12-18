@@ -139,30 +139,31 @@ $ curl -X GET \
 {
   "orders": [
     {
-      "order_type": "limit",
-      "market_id": 1,
-      "market_type": "spot",
+      "orderType": "limit",
+      "marketIndex": 1,
+      "marketType": "spot",
       "amount": "-1.100000000",
       "filled": "0.000000000",
       "price": "80.500000",
-      "post_only": true,
-      "reduce_only": false,
-      "user_order_id": 101,
-      "order_id": 35,
-      "immediate_or_cancel": false
+      "postOnly": true,
+      "reduceOnly": false,
+      "userOrderId": 101,
+      "orderId": 35,
+      "immediateOrCancel": false
     },
     {
-      "order_type": "limit",
-      "market_id": 0,
-      "market_type": "perp",
-      "amount": "-1.230000000",
+      "orderType": "limit",
+      "marketIndex": 1,
+      "marketType": "perp",
+      "amount": "0.005000000",
       "filled": "0.000000000",
-      "price": "80.000000",
-      "post_only": true,
-      "reduce_only": false,
-      "user_order_id": 0,
-      "order_id": 37,
-      "immediate_or_cancel": false
+      "price": "0.000000",
+      "postOnly": true,
+      "reduceOnly": false,
+      "userOrderId": 103,
+      "orderId": 50,
+      "immediateOrCancel": false,
+      "oraclePriceOffset": "20.000000"
     }
   ]
 }
@@ -205,7 +206,8 @@ localhost:8080/v2/positions
 - use sub-zero `amount` to indicate sell/offer order
 - `userOrderId` is a uint in the range 1 <= x <= 255 which can be assigned by the client to help distinguish orders
 - `orderType` only "limit" and "market" options are fully supported by the gateway
-
+- `oraclePriceOffset` supported on `"limit"` order types.
+It creates a limit order with a floating price relative to the market oracle price. when supplied the `price` field is ignored.
 ```bash
 $ curl localhost:8080/v2/orders -X POST \
 -H 'content-type: application/json' \
@@ -218,17 +220,17 @@ $ curl localhost:8080/v2/orders -X POST \
         "price": 80.0,
         "postOnly": true,
         "orderType": "limit",
-        "userOrderId": 101
+        "userOrderId": 101,
         "immediateOrCancel": false,
-        "reduce_only": false,
+        "reduceOnly": false
     },
     {
         "marketIndex": 0,
         "marketType": "perp",
         "amount": 1.23,
-        "price": 60.0,
         "postOnly": true,
         "orderType": "limit",
+        "oraclePriceOffset": 2,
         "userOrderId": 102
     }]
 }'
@@ -293,7 +295,7 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
             "postOnly": true,
             "orderType": "limit",
             "immediateOrCancel": false,
-            "reduce_only": false
+            "reduceOnly": false
         }]
     }
 }'

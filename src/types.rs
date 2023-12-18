@@ -17,10 +17,11 @@ use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Order {
     #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
     order_type: sdk_types::OrderType,
-    market_id: u16,
+    market_index: u16,
     #[serde(
         serialize_with = "market_type_ser",
         deserialize_with = "market_type_de"
@@ -34,6 +35,8 @@ pub struct Order {
     user_order_id: u8,
     order_id: u32,
     immediate_or_cancel: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    oracle_price_offset: Option<Decimal>,
 }
 
 impl Order {
@@ -45,7 +48,7 @@ impl Order {
         let to_sign = 1_i64 - 2 * (value.direction as i64);
 
         Order {
-            market_id: value.market_index,
+            market_index: value.market_index,
             market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, decimals),
@@ -56,6 +59,14 @@ impl Order {
             order_id: value.order_id,
             post_only: value.post_only,
             user_order_id: value.user_order_id,
+            oracle_price_offset: if value.oracle_price_offset == 0 {
+                None
+            } else {
+                Some(Decimal::new(
+                    value.oracle_price_offset as i64,
+                    PRICE_PRECISION.ilog10(),
+                ))
+            },
         }
     }
 }
@@ -202,6 +213,7 @@ pub struct PlaceOrder {
     #[serde(flatten)]
     market: Market,
     amount: Decimal,
+    #[serde(default)]
     price: Decimal,
     /// 0 indicates it is not set (according to program)
     #[serde(default)]
@@ -218,6 +230,8 @@ pub struct PlaceOrder {
     reduce_only: bool,
     #[serde(default)]
     immediate_or_cancel: bool,
+    #[serde(default)]
+    oracle_price_offset: Option<Decimal>,
 }
 
 fn market_type_ser<S>(market_type: &sdk_types::MarketType, serializer: S) -> Result<S::Ok, S::Error>
@@ -249,6 +263,12 @@ fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
     ((x.mantissa().unsigned_abs() * target as u128) / 10_u128.pow(x.scale())) as u64
 }
 
+#[inline]
+/// Convert decimal to unsigned fixed-point representation with `target` precision
+fn scale_decimal_to_i64(x: Decimal, target: u32) -> i64 {
+    ((x.mantissa().abs() * target as i128) / 10_i128.pow(x.scale())) as i64
+}
+
 impl PlaceOrder {
     pub fn to_order_params(self, context: Context) -> OrderParams {
         let target_scale = if let MarketType::Perp = self.market.market_type {
@@ -259,7 +279,11 @@ impl PlaceOrder {
             config.precision as u32
         };
         let base_amount = scale_decimal_to_u64(self.amount.abs(), target_scale);
-        let price = scale_decimal_to_u64(self.price, PRICE_PRECISION as u32);
+        let price = if self.oracle_price_offset.is_none() {
+            scale_decimal_to_u64(self.price, PRICE_PRECISION as u32)
+        } else {
+            0
+        };
 
         OrderParams {
             market_index: self.market.market_index,
@@ -275,11 +299,14 @@ impl PlaceOrder {
             immediate_or_cancel: self.immediate_or_cancel,
             reduce_only: self.reduce_only,
             post_only: if self.post_only {
-                PostOnlyParam::TryPostOnly
+                PostOnlyParam::MustPostOnly // this will report the failure to the gateway caller
             } else {
                 PostOnlyParam::None
             },
             user_order_id: self.user_order_id,
+            oracle_price_offset: self
+                .oracle_price_offset
+                .map(|x| scale_decimal_to_i64(x, PRICE_PRECISION as u32) as i32),
             ..Default::default()
         }
     }
