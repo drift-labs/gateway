@@ -7,13 +7,14 @@ use drift_sdk::{
         spot_market_config_by_index, PerpMarketConfig, SpotMarketConfig, BASE_PRECISION,
         PRICE_PRECISION,
     },
+    dlob::{self, L2Level, L2Orderbook},
     types::{
         self as sdk_types, Context, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
         PostOnlyParam,
     },
 };
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Order {
@@ -37,13 +38,7 @@ pub struct Order {
 
 impl Order {
     pub fn from_sdk_order(value: sdk_types::Order, context: Context) -> Self {
-        let precision = if let MarketType::Perp = value.market_type {
-            BASE_PRECISION.ilog10()
-        } else {
-            let config =
-                spot_market_config_by_index(context, value.market_index).expect("market exists");
-            config.precision_exp as u32
-        };
+        let decimals = get_market_decimals(context, value.market_index, value.market_type);
 
         // 0 = long
         // 1 = short
@@ -53,8 +48,8 @@ impl Order {
             market_id: value.market_index,
             market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
-            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, precision),
-            filled: Decimal::new(value.base_asset_amount_filled as i64, precision),
+            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, decimals),
+            filled: Decimal::new(value.base_asset_amount_filled as i64, decimals),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
@@ -165,12 +160,7 @@ impl ModifyOrder {
         market_type: MarketType,
         context: Context,
     ) -> ModifyOrderParams {
-        let target_scale = if let MarketType::Perp = market_type {
-            BASE_PRECISION as u32
-        } else {
-            let config = spot_market_config_by_index(context, market_index).expect("market exists");
-            config.precision as u32
-        };
+        let target_scale = get_market_precision(context, market_index, market_type);
 
         let (amount, direction) = if let Some(base_amount) = self.amount {
             let direction = if base_amount.is_sign_negative() {
@@ -186,11 +176,9 @@ impl ModifyOrder {
             (None, None)
         };
 
-        let price = if let Some(price) = self.price {
-            Some(scale_decimal_to_u64(price, PRICE_PRECISION as u32))
-        } else {
-            None
-        };
+        let price = self
+            .price
+            .map(|p| scale_decimal_to_u64(p, PRICE_PRECISION as u32));
 
         ModifyOrderParams {
             base_asset_amount: amount,
@@ -298,7 +286,7 @@ impl PlaceOrder {
 }
 
 #[cfg_attr(test, derive(Default))]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Market {
     /// The market index
@@ -356,6 +344,7 @@ pub struct GetPositionsResponse {
 
 #[derive(Serialize)]
 pub struct MarketInfo {
+    #[serde(rename = "marketIndex")]
     market_id: u16,
     symbol: &'static str,
     precision: u8,
@@ -423,6 +412,107 @@ impl TxResponse {
 pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
     pub place: PlaceOrdersRequest,
+}
+
+/// Serialize DLOB with human readable numeric values
+pub struct OrderbookL2 {
+    inner: L2Orderbook,
+    context: Context,
+    market: Market,
+}
+
+impl OrderbookL2 {
+    pub fn new(inner: L2Orderbook, market: Market, context: Context) -> Self {
+        Self {
+            inner,
+            market,
+            context,
+        }
+    }
+}
+
+impl Serialize for OrderbookL2 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(3))?;
+        map.serialize_entry("slot", &self.inner.slot)?;
+        map.serialize_entry(
+            "bids",
+            &PriceLevelSerializer {
+                inner: self.inner.bids.as_slice(),
+                market: self.market,
+                context: self.context,
+            },
+        )?;
+        map.serialize_entry(
+            "asks",
+            &PriceLevelSerializer {
+                inner: self.inner.asks.as_slice(),
+                market: self.market,
+                context: self.context,
+            },
+        )?;
+        map.end()
+    }
+}
+
+struct PriceLevelSerializer<'a> {
+    inner: &'a [L2Level],
+    market: Market,
+    context: Context,
+}
+
+impl<'a> Serialize for PriceLevelSerializer<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_seq(
+            self.inner
+                .iter()
+                .map(|l| PriceLevel::new(l, self.market, self.context)),
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PriceLevel {
+    price: Decimal,
+    amount: Decimal,
+}
+
+impl PriceLevel {
+    pub fn new(level: &dlob::L2Level, market: Market, context: Context) -> Self {
+        let decimals = get_market_decimals(context, market.market_index, market.market_type);
+        Self {
+            price: Decimal::new(level.price as i64, PRICE_PRECISION.ilog10()),
+            amount: Decimal::new(level.size as i64, decimals),
+        }
+    }
+}
+
+/// Return the number of units in a whole token for this market
+#[inline]
+fn get_market_precision(context: Context, market_index: u16, market_type: MarketType) -> u32 {
+    if let MarketType::Perp = market_type {
+        BASE_PRECISION as u32
+    } else {
+        let config = spot_market_config_by_index(context, market_index).expect("market exists");
+        config.precision as u32
+    }
+}
+
+/// Return the number of decimal places for the market
+#[inline]
+fn get_market_decimals(context: Context, market_index: u16, market_type: MarketType) -> u32 {
+    if let MarketType::Perp = market_type {
+        BASE_PRECISION.ilog10()
+    } else {
+        let config = spot_market_config_by_index(context, market_index).expect("market exists");
+        config.precision_exp as u32
+    }
 }
 
 #[cfg(test)]

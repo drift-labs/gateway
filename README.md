@@ -46,14 +46,68 @@ Options:
 Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
 
 ### Get Market Info
+gets info on all available spot & perp markets
 ```bash
 $ curl localhost:8080/v2/markets
 ```
 
+**Response**
+```json
+{
+  "spot": [
+    {
+      "marketIndex": 0,
+      "symbol": "USDC",
+      "precision": 6
+    },
+    // ...
+  ],
+  "perp": [
+    {
+      "marketIndex": 0,
+      "symbol": "SOL-PERP",
+      "precision": 6
+    },
+  ]
+    // ...
+}
+```
+
 ### Get Orderbook
-gets a full snapshot of the current orderbook
+gets a full snapshot of the current orderbook for a given market
 ```bash
 $ curl localhost:8080/v2/orderbook -X GET -H 'content-type: application/json' -d '{"marketIndex":0,"marketType":"perp"}'
+```
+
+**Response**
+```json
+{
+  "slot": 266118166,
+  "bids": [
+    {
+      "price": "53.616300",
+      "amount": "7.110000000"
+    },
+    {
+      "price": "47.014300",
+      "amount": "2.000000000"
+    },
+    {
+      "price": "20.879800",
+      "amount": "12.160000000"
+    }
+  ],
+  "asks": [
+    {
+      "price": "80.000000",
+      "amount": "1.230000000"
+    },
+    {
+      "price": "120.015569",
+      "amount": "1.000000000"
+    }
+  ]
+}
 ```
 
 to stream orderbooks via websocket public DLOB servers are available at:
@@ -71,6 +125,40 @@ get orders by market
 $ curl localhost:8080/v2/orders -X GET -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}'
 ```
 
+**Response**
+```json
+{
+  "orders": [
+    {
+      "order_type": "limit",
+      "market_id": 1,
+      "market_type": "spot",
+      "amount": "-1.100000000",
+      "filled": "0.000000000",
+      "price": "80.500000",
+      "post_only": true,
+      "reduce_only": false,
+      "user_order_id": 101,
+      "order_id": 35,
+      "immediate_or_cancel": false
+    },
+    {
+      "order_type": "limit",
+      "market_id": 0,
+      "market_type": "perp",
+      "amount": "-1.230000000",
+      "filled": "0.000000000",
+      "price": "80.000000",
+      "post_only": true,
+      "reduce_only": false,
+      "user_order_id": 0,
+      "order_id": 37,
+      "immediate_or_cancel": false
+    }
+  ]
+}
+```
+
 ### Get Positions
 get all positions
 ```bash
@@ -79,6 +167,24 @@ $ curl localhost:8080/v2/positions
 get positions by market
 ```bash
 $ curl localhost:8080/v2/positions -X GET -H 'content-type: application/json' -d '{"marketIndex":0,"marketType":"perp"}'
+```
+
+```json
+{
+  "spot": [
+    {
+      "amount": "0.400429",
+      "type": "deposit",
+      "market_id": 0
+    },
+    {
+      "amount": "9.971961702",
+      "type": "deposit",
+      "market_id": 1
+    }
+  ],
+  "perp": []
+}
 ```
 
 ### Place Orders

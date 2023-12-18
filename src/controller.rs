@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use drift_sdk::{
-    dlob::{DLOBClient, L2Orderbook},
+    dlob::DLOBClient,
     types::{Context, MarketType, ModifyOrderParams, SdkError, SdkResult},
     DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::types::{
     AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest,
     GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse,
-    ModifyOrdersRequest, Order, PlaceOrdersRequest, SpotPosition, TxResponse,
+    ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest, SpotPosition, TxResponse,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -300,9 +300,9 @@ impl AppState {
             .map_err(handle_tx_err)
     }
 
-    pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<L2Orderbook> {
-        let book = self.dlob_client.get_l2(req.market.as_market_id()).await;
-        Ok(book?)
+    pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
+        let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
+        Ok(OrderbookL2::new(book, req.market, self.context()))
     }
 }
 

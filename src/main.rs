@@ -193,20 +193,95 @@ fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>
 
 #[cfg(test)]
 mod tests {
-    use actix_web::{http::header::ContentType, test, App};
+    use actix_web::{http::Method, test, App};
+
+    use crate::types::Market;
 
     use super::*;
 
+    const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";
+
+    fn get_seed() -> String {
+        std::env::var("DRIFT_GATEWAY_KEY")
+            .expect("DRIFT_GATEWAY_KEY is set")
+            .to_string()
+    }
+
+    async fn setup_controller() -> AppState {
+        AppState::new(&get_seed(), TEST_ENDPOINT, true).await
+    }
+
     #[actix_web::test]
     async fn get_orders_works() {
-        let controller = AppState::new("test", "example.com", true).await;
+        let controller = setup_controller().await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
                 .service(get_orders),
         )
         .await;
-        let req = test::TestRequest::default().to_request();
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/orders")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn get_positions_works() {
+        let controller = setup_controller().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_positions),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/positions")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn get_orderbook_works() {
+        let controller = setup_controller().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_orderbook),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/orderbook")
+            .set_json(GetOrderbookRequest {
+                market: Market::perp(0), // sol-perp
+            })
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn get_markets_works() {
+        let controller = setup_controller().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_markets),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/markets")
+            .to_request();
+
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
     }
