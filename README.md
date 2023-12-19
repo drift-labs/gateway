@@ -312,3 +312,13 @@ error responses have the following JSON structure:
 
 Some endpoints send transactions to the drift program and can return program error codes.  
 The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)  
+
+### Common Errors
+`AccountNotFound` usually means the drift user account has not been initialized.
+Use the UI or Ts/Python sdk to initialize the account first.
+```json
+{
+  "code": 500,
+  "reason": "AccountNotFound: pubkey=FQHZg9yU2o5uN9ERQyeTNNAMe3JWf13gce2DUj6x2HTv"
+}
+```
