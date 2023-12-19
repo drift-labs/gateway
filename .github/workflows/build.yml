@@ -49,4 +49,6 @@ jobs:
       - name: Build
         run: cargo check --all
       - name: Test
+        env:
+          DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
         run: cargo test --all

@@ -19,9 +19,9 @@ pub type GatewayResult<T> = Result<T, ControllerError>;
 
 #[derive(Error, Debug)]
 pub enum ControllerError {
-    #[error("internal server error")]
+    #[error("internal error: {0}")]
     Sdk(#[from] SdkError),
-    #[error("order id not found")]
+    #[error("order id not found: {0}")]
     UnknownOrderId(u32),
     #[error("tx failed ({code}): {reason}")]
     TxFailed { reason: String, code: u32 },
@@ -30,6 +30,7 @@ pub enum ControllerError {
 #[derive(Clone)]
 pub struct AppState {
     wallet: Wallet,
+    context: Context,
     client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
 }
@@ -37,7 +38,7 @@ pub struct AppState {
 impl AppState {
     /// Configured program/network context
     pub fn context(&self) -> Context {
-        self.wallet.context()
+        self.context
     }
     /// Configured drift user address
     pub fn user(&self) -> &Pubkey {
@@ -48,15 +49,13 @@ impl AppState {
         self.wallet.authority()
     }
     pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
-        let wallet = Wallet::try_from_str(
-            if devnet {
-                Context::DevNet
-            } else {
-                Context::MainNet
-            },
-            secret_key,
-        )
-        .expect("valid key");
+        let context = if devnet {
+            Context::DevNet
+        } else {
+            Context::MainNet
+        };
+        let wallet = Wallet::try_from_str(context, secret_key).expect("valid key");
+
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
         let client = DriftClient::new(endpoint, account_provider)
             .await
@@ -70,6 +69,7 @@ impl AppState {
 
         Self {
             wallet,
+            context,
             client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
         }

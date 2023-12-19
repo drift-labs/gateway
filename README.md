@@ -13,7 +13,7 @@ export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 
 # '--dev' to toggle devnet markets (default is mainnet)
 # ensure the RPC node is also using the matching devnet or mainnet
-drift-gateway --dev  https://api.devnet.solana.com
+drift-gateway --dev https://api.devnet.solana.com
 
 # or mainnet
 drift-gateway https://api.mainnet-beta.solana.com
