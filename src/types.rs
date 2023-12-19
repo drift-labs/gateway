@@ -162,6 +162,7 @@ pub struct ModifyOrder {
     pub user_order_id: Option<u8>,
     pub order_id: Option<u32>,
     reduce_only: Option<bool>,
+    oracle_price_offset: Option<Decimal>,
 }
 
 impl ModifyOrder {
@@ -191,11 +192,16 @@ impl ModifyOrder {
             .price
             .map(|p| scale_decimal_to_u64(p, PRICE_PRECISION as u32));
 
+        let oracle_price_offset = self
+            .oracle_price_offset
+            .map(|p| scale_decimal_to_i64(p, PRICE_PRECISION as u32) as i32);
+
         ModifyOrderParams {
             base_asset_amount: amount,
             direction,
             price,
             reduce_only: self.reduce_only,
+            oracle_price_offset,
             ..Default::default()
         }
     }
@@ -266,7 +272,7 @@ fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
 #[inline]
 /// Convert decimal to unsigned fixed-point representation with `target` precision
 fn scale_decimal_to_i64(x: Decimal, target: u32) -> i64 {
-    ((x.mantissa().abs() * target as i128) / 10_i128.pow(x.scale())) as i64
+    ((x.mantissa() * target as i128) / 10_i128.pow(x.scale())) as i64
 }
 
 impl PlaceOrder {
@@ -544,7 +550,10 @@ fn get_market_decimals(context: Context, market_index: u16, market_type: MarketT
 
 #[cfg(test)]
 mod tests {
-    use drift_sdk::types::{Context, MarketType, PositionDirection};
+    use drift_sdk::{
+        constants::BASE_PRECISION,
+        types::{Context, MarketType, OrderType, PositionDirection},
+    };
     use std::str::FromStr;
 
     use crate::types::{Market, ModifyOrder, Order};
@@ -605,6 +614,33 @@ mod tests {
     }
 
     #[test]
+    fn oracle_price_offset_works() {
+        let p = PlaceOrder {
+            price: Decimal::from_str("1.23").unwrap(),
+            oracle_price_offset: Decimal::from_str("-0.5").ok(),
+            order_type: OrderType::Limit,
+            market: Market::perp(0),
+            ..Default::default()
+        };
+        let order = p.to_order_params(Context::MainNet);
+        assert_eq!(order.price, 0);
+        assert_eq!(order.oracle_price_offset, Some(-500_000));
+
+        let o = drift_sdk::types::Order {
+            base_asset_amount: 1 * BASE_PRECISION,
+            price: 0,
+            market_index: 0,
+            market_type: MarketType::Perp,
+            oracle_price_offset: -500_000,
+            ..Default::default()
+        };
+        let order = Order::from_sdk_order(o, Context::MainNet);
+        assert_eq!(order.price, Decimal::ZERO,);
+
+        assert_eq!(order.oracle_price_offset, Decimal::from_str("-0.5").ok());
+    }
+
+    #[test]
     fn order_from_sdk_order() {
         let cases = [
             (
@@ -633,6 +669,7 @@ mod tests {
         let m = ModifyOrder {
             amount: Decimal::from_str("-0.5").ok(),
             price: Decimal::from_str("11.1").ok(),
+            oracle_price_offset: Decimal::from_str("0.1").ok(),
             ..Default::default()
         };
         let order_params = m.to_order_params(1, MarketType::Spot, Context::MainNet);
@@ -640,10 +677,12 @@ mod tests {
         assert_eq!(order_params.direction, Some(PositionDirection::Short));
         assert_eq!(order_params.base_asset_amount, Some(500_000_000));
         assert_eq!(order_params.price, Some(11_100_000));
+        assert_eq!(order_params.oracle_price_offset, Some(100_000));
 
         let m = ModifyOrder {
             amount: Decimal::from_str("12").ok(),
             price: Decimal::from_str("1.02").ok(),
+            oracle_price_offset: Decimal::from_str("-2").ok(),
             ..Default::default()
         };
         let order_params = m.to_order_params(1, MarketType::Spot, Context::MainNet);
@@ -651,5 +690,6 @@ mod tests {
         assert_eq!(order_params.direction, Some(PositionDirection::Long));
         assert_eq!(order_params.base_asset_amount, Some(12_000_000_000));
         assert_eq!(order_params.price, Some(1_020_000));
+        assert_eq!(order_params.oracle_price_offset, Some(-2_000_000));
     }
 }
