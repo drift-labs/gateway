@@ -308,7 +308,7 @@ impl AppState {
             }
         }
 
-        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
+        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(account_data))
             .modify_orders(params)
             .build();
 
