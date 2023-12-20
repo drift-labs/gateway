@@ -301,6 +301,11 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 }'
 ```
 
+## Sub-account Switching
+By default the gateway uses the drift sub-account (index 0)
+A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
+e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
+
 ### Errors
 error responses have the following JSON structure:
 ```json
