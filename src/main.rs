@@ -16,6 +16,12 @@ use types::{
 mod controller;
 mod types;
 
+#[derive(serde::Deserialize)]
+struct Args {
+    #[serde(default, rename = "subAccountId")]
+    sub_account_id: u16,
+}
+
 #[get("/markets")]
 async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
     let markets = controller.get_markets();
@@ -23,7 +29,11 @@ async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
 }
 
 #[get("/orders")]
-async fn get_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+async fn get_orders(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
     let mut req = None;
     if !body.is_empty() {
         match serde_json::from_slice(body.as_ref()) {
@@ -32,27 +42,39 @@ async fn get_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl R
         }
     };
 
-    handle_result(controller.get_orders(req).await)
+    handle_result(controller.get_orders(req, args.sub_account_id).await)
 }
 
 #[post("/orders")]
-async fn create_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+async fn create_orders(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.place_orders(req).await),
+        Ok(req) => handle_result(controller.place_orders(req, args.sub_account_id).await),
         Err(err) => handle_deser_error(err),
     }
 }
 
 #[patch("/orders")]
-async fn modify_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+async fn modify_orders(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.modify_orders(req).await),
+        Ok(req) => handle_result(controller.modify_orders(req, args.sub_account_id).await),
         Err(err) => handle_deser_error(err),
     }
 }
 
 #[delete("/orders")]
-async fn cancel_orders(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+async fn cancel_orders(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
     let mut req = CancelOrdersRequest::default();
     // handle the body manually to allow empty payload `Json` requires some body is set
     if !body.is_empty() {
@@ -61,22 +83,31 @@ async fn cancel_orders(controller: web::Data<AppState>, body: web::Bytes) -> imp
             Err(err) => return handle_deser_error(err),
         }
     };
-    handle_result(controller.cancel_orders(req).await)
+    handle_result(controller.cancel_orders(req, args.sub_account_id).await)
 }
 
 #[post("/orders/cancelAndPlace")]
 async fn cancel_and_place_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
+    args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.cancel_and_place_orders(req).await),
+        Ok(req) => handle_result(
+            controller
+                .cancel_and_place_orders(req, args.sub_account_id)
+                .await,
+        ),
         Err(err) => handle_deser_error(err),
     }
 }
 
 #[get("/positions")]
-async fn get_positions(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
+async fn get_positions(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
     let mut req = None;
     // handle the body manually to allow empty payload `Json` requires some body is set
     if !body.is_empty() {
@@ -86,7 +117,7 @@ async fn get_positions(controller: web::Data<AppState>, body: web::Bytes) -> imp
         }
     };
 
-    handle_result(controller.get_positions(req).await)
+    handle_result(controller.get_positions(req, args.sub_account_id).await)
 }
 
 #[get("/orderbook")]
@@ -111,9 +142,9 @@ async fn main() -> std::io::Result<()> {
         config.host, config.port
     );
     info!(
-        "🪪: authority: {:?}, user: {:?}",
+        "🪪: authority: {:?}, default sub-account: {:?}",
         state.authority(),
-        state.user()
+        state.default_sub_account()
     );
 
     HttpServer::new(move || {

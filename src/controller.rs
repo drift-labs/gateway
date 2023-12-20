@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use drift_sdk::{
     dlob::DLOBClient,
@@ -36,17 +36,12 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Configured program/network context
-    pub fn context(&self) -> Context {
-        self.context
-    }
-    /// Configured drift user address
-    pub fn user(&self) -> &Pubkey {
-        self.wallet.user()
-    }
     /// Configured drift signing address + fee payer
     pub fn authority(&self) -> Pubkey {
         self.wallet.authority()
+    }
+    pub fn default_sub_account(&self) -> Pubkey {
+        self.wallet.default_sub_account()
     }
     pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
         let context = if devnet {
@@ -54,8 +49,7 @@ impl AppState {
         } else {
             Context::MainNet
         };
-        let wallet = Wallet::try_from_str(context, secret_key).expect("valid key");
-
+        let wallet = Wallet::try_from_str(secret_key).expect("valid key");
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
         let client = DriftClient::new(endpoint, account_provider)
             .await
@@ -82,14 +76,20 @@ impl AppState {
     /// 2) "user ids" are set, cancel all orders by user assigned id
     /// 3) ids are given, cancel all orders by id (global, exchange assigned id)
     /// 4) catch all. cancel all orders
-    pub async fn cancel_orders(&self, req: CancelOrdersRequest) -> GatewayResult<TxResponse> {
-        let user_data = self.client.get_user_account(self.user()).await?;
-        let builder = TransactionBuilder::new(&self.wallet, &user_data);
+    pub async fn cancel_orders(
+        &self,
+        req: CancelOrdersRequest,
+        sub_account_id: u16,
+    ) -> GatewayResult<TxResponse> {
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let builder =
+            TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data));
 
         let tx = if let Some(market) = req.market {
             builder.cancel_orders((market.market_index, market.market_type), None)
         } else if !req.user_ids.is_empty() {
-            let order_ids = user_data
+            let order_ids = account_data
                 .orders
                 .iter()
                 .filter(|o| o.slot > 0 && req.user_ids.contains(&o.user_order_id))
@@ -114,8 +114,10 @@ impl AppState {
     pub async fn get_positions(
         &self,
         req: Option<GetPositionsRequest>,
+        sub_account_id: u16,
     ) -> GatewayResult<GetPositionsResponse> {
-        let (all_spot, all_perp) = self.client.all_positions(self.user()).await?;
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let (all_spot, all_perp) = self.client.all_positions(&sub_account).await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
         let mut filtered_spot_positions = Vec::<SpotPosition>::with_capacity(all_spot.len());
@@ -160,8 +162,10 @@ impl AppState {
     pub async fn get_orders(
         &self,
         req: Option<GetOrdersRequest>,
+        sub_account_id: u16,
     ) -> GatewayResult<GetOrdersResponse> {
-        let orders = self.client.all_orders(self.user()).await?;
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let orders = self.client.all_orders(&sub_account).await?;
         Ok(GetOrdersResponse {
             orders: orders
                 .into_iter()
@@ -172,14 +176,14 @@ impl AppState {
                         true
                     }
                 })
-                .map(|o| Order::from_sdk_order(o, self.context()))
+                .map(|o| Order::from_sdk_order(o, self.context))
                 .collect(),
         })
     }
 
     pub fn get_markets(&self) -> AllMarketsResponse {
-        let spot = drift_sdk::constants::spot_market_configs(self.wallet.context());
-        let perp = drift_sdk::constants::perp_market_configs(self.wallet.context());
+        let spot = drift_sdk::constants::spot_market_configs(self.context);
+        let perp = drift_sdk::constants::perp_market_configs(self.context);
 
         AllMarketsResponse {
             spot: spot.iter().map(|x| (*x).into()).collect(),
@@ -190,21 +194,27 @@ impl AppState {
     pub async fn cancel_and_place_orders(
         &self,
         req: CancelAndPlaceRequest,
+        sub_account_id: u16,
     ) -> GatewayResult<TxResponse> {
         let orders = req
             .place
             .orders
             .into_iter()
-            .map(|o| o.to_order_params(self.context()))
+            .map(|o| o.to_order_params(self.context))
             .collect();
 
-        let user_data = self.client.get_user_account(self.user()).await?;
-        let builder = TransactionBuilder::new(&self.wallet, &user_data);
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let builder = TransactionBuilder::new(
+            self.context,
+            self.wallet.sub_account(0),
+            Cow::Borrowed(&account_data),
+        );
 
         let tx = if let Some(market) = req.cancel.market {
             builder.cancel_orders((market.market_index, market.market_type), None)
         } else if !req.cancel.user_ids.is_empty() {
-            let order_ids = user_data
+            let order_ids = account_data
                 .orders
                 .iter()
                 .filter(|o| o.slot > 0 && req.cancel.user_ids.contains(&o.user_order_id))
@@ -226,18 +236,22 @@ impl AppState {
             .map_err(handle_tx_err)
     }
 
-    pub async fn place_orders(&self, req: PlaceOrdersRequest) -> GatewayResult<TxResponse> {
+    pub async fn place_orders(
+        &self,
+        req: PlaceOrdersRequest,
+        sub_account_id: u16,
+    ) -> GatewayResult<TxResponse> {
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let account_data = self.client.get_user_account(&sub_account).await?;
+
         let orders = req
             .orders
             .into_iter()
-            .map(|o| o.to_order_params(self.context()))
+            .map(|o| o.to_order_params(self.context))
             .collect();
-        let tx = TransactionBuilder::new(
-            &self.wallet,
-            &self.client.get_user_account(self.user()).await?,
-        )
-        .place_orders(orders)
-        .build();
+        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
+            .place_orders(orders)
+            .build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -246,27 +260,32 @@ impl AppState {
             .map_err(handle_tx_err)
     }
 
-    pub async fn modify_orders(&self, req: ModifyOrdersRequest) -> GatewayResult<TxResponse> {
-        let user_data = &self.client.get_user_account(self.user()).await?;
+    pub async fn modify_orders(
+        &self,
+        req: ModifyOrdersRequest,
+        sub_account_id: u16,
+    ) -> GatewayResult<TxResponse> {
+        let sub_account = self.wallet.sub_account(sub_account_id);
+        let account_data = &self.client.get_user_account(&sub_account).await?;
         // NB: its possible to let the drift program sort the modifications by userOrderId
         // sorting it client side for simplicity
         let mut params = Vec::<(u32, ModifyOrderParams)>::with_capacity(req.orders.len());
         for order in req.orders {
             if let Some(order_id) = order.order_id {
                 if let Some(onchain_order) =
-                    user_data.orders.iter().find(|x| x.order_id == order_id)
+                    account_data.orders.iter().find(|x| x.order_id == order_id)
                 {
                     params.push((
                         order_id,
                         order.to_order_params(
                             onchain_order.market_index,
                             onchain_order.market_type,
-                            self.context(),
+                            self.context,
                         ),
                     ));
                 }
             } else if let Some(user_order_id) = order.user_order_id {
-                if let Some(onchain_order) = user_data
+                if let Some(onchain_order) = account_data
                     .orders
                     .iter()
                     .find(|x| x.user_order_id == user_order_id)
@@ -276,7 +295,7 @@ impl AppState {
                         order.to_order_params(
                             onchain_order.market_index,
                             onchain_order.market_type,
-                            self.context(),
+                            self.context,
                         ),
                     ));
                 }
@@ -289,7 +308,7 @@ impl AppState {
             }
         }
 
-        let tx = TransactionBuilder::new(&self.wallet, user_data)
+        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(account_data))
             .modify_orders(params)
             .build();
 
@@ -302,7 +321,7 @@ impl AppState {
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
         let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
-        Ok(OrderbookL2::new(book, req.market, self.context()))
+        Ok(OrderbookL2::new(book, req.market, self.context))
     }
 }
 
