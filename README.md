@@ -8,7 +8,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 # build
 cargo build --release
 
-# configure the gateway wallet key
+# configure the gateway signing key
 export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 
 # '--dev' to toggle devnet markets (default is mainnet)
@@ -27,7 +27,7 @@ docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https:/
 
 ## Usage
 ```bash
-Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>]
+Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>]
 
 Drift gateway server
 
@@ -38,6 +38,8 @@ Options:
   --dev             run in devnet mode
   --host            gateway host address
   --port            gateway port
+  --delegate        use delegated signing mode, provide the delegator's pubkey
+                    e.g. `--delegate <DELEGATOR_PUBKEY>`
   --help            display usage information
 ```
 
@@ -178,7 +180,7 @@ get positions by market
 ```bash
 $ curl -X GET \
   -H 'content-type: application/json' \
-  -d '{"marketIndex":0,"marketType":"perp"} \
+  -d '{"marketIndex":0,"marketType":"perp"}' \
 localhost:8080/v2/positions
 ```
 
@@ -300,6 +302,13 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
     }
 }'
 ```
+
+## Delegated Signing Mode
+Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
+In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY`.
+
+Use the drift UI or Ts/Python SDK to assign a delegator key.
+see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
 
 ## Sub-account Switching
 By default the gateway uses the drift sub-account (index 0)

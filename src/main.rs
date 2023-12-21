@@ -7,7 +7,9 @@ use argh::FromArgs;
 use log::{error, info};
 
 use controller::{AppState, ControllerError};
+use drift_sdk::Pubkey;
 use serde_json::json;
+use std::str::FromStr;
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest,
     PlaceOrdersRequest,
@@ -135,17 +137,30 @@ async fn main() -> std::io::Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
     let secret_key = std::env::var("DRIFT_GATEWAY_KEY").expect("missing DRIFT_GATEWAY_KEY");
-    let state = AppState::new(secret_key.as_str(), &config.rpc_host, config.dev).await;
+    let delegate = config
+        .delegate
+        .map(|ref x| Pubkey::from_str(x).expect("valid pubkey"));
+    let state = AppState::new(secret_key.as_str(), &config.rpc_host, config.dev, delegate).await;
 
     info!(
         "🏛️ gateway listening at http://{}:{}",
         config.host, config.port
     );
-    info!(
-        "🪪: authority: {:?}, default sub-account: {:?}",
-        state.authority(),
-        state.default_sub_account()
-    );
+
+    if delegate.is_some() {
+        info!(
+            "🪪: authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
+            state.authority(),
+            state.default_sub_account(),
+            state.signer(),
+        );
+    } else {
+        info!(
+            "🪪: authority: {:?}, default sub-account: {:?}",
+            state.authority(),
+            state.default_sub_account()
+        );
+    }
 
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(state.clone())).service(
@@ -180,6 +195,10 @@ struct GatewayConfig {
     /// gateway port
     #[argh(option, default = "8080")]
     port: u16,
+    /// use delegated signing mode, provide the delegator's pubkey
+    /// e.g. `--delegate <DELEGATOR_PUBKEY>`
+    #[argh(option)]
+    delegate: Option<String>,
 }
 
 fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
@@ -239,7 +258,7 @@ mod tests {
     }
 
     async fn setup_controller() -> AppState {
-        AppState::new(&get_seed(), TEST_ENDPOINT, true).await
+        AppState::new(&get_seed(), TEST_ENDPOINT, true, None).await
     }
 
     #[actix_web::test]

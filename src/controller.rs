@@ -36,20 +36,32 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Configured drift signing address + fee payer
-    pub fn authority(&self) -> Pubkey {
+    /// Configured drift authority address
+    pub fn authority(&self) -> &Pubkey {
         self.wallet.authority()
+    }
+    /// Configured drift signing address
+    pub fn signer(&self) -> Pubkey {
+        self.wallet.signer()
     }
     pub fn default_sub_account(&self) -> Pubkey {
         self.wallet.default_sub_account()
     }
-    pub async fn new(secret_key: &str, endpoint: &str, devnet: bool) -> Self {
+    pub async fn new(
+        secret_key: &str,
+        endpoint: &str,
+        devnet: bool,
+        delegate: Option<Pubkey>,
+    ) -> Self {
         let context = if devnet {
             Context::DevNet
         } else {
             Context::MainNet
         };
-        let wallet = Wallet::try_from_str(secret_key).expect("valid key");
+        let mut wallet = Wallet::try_from_str(secret_key).expect("valid key");
+        if let Some(authority) = delegate {
+            wallet.to_delegated(authority);
+        }
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
         let client = DriftClient::new(endpoint, account_provider)
             .await
