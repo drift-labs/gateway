@@ -63,7 +63,7 @@ impl AppState {
             wallet.to_delegated(authority);
         }
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
-        let client = DriftClient::new(endpoint, account_provider)
+        let client = DriftClient::new(context, endpoint, account_provider)
             .await
             .expect("ok");
 

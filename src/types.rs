@@ -3,14 +3,11 @@
 //! - wrappers for presenting drift program types with less implementation detail
 //!
 use drift_sdk::{
-    constants::{
-        spot_market_config_by_index, PerpMarketConfig, SpotMarketConfig, BASE_PRECISION,
-        PRICE_PRECISION,
-    },
+    constants::{spot_market_config_by_index, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
     types::{
-        self as sdk_types, Context, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
-        PostOnlyParam,
+        self as sdk_types, Context, MarketPrecision, MarketType, ModifyOrderParams, OrderParams,
+        PerpMarket, PositionDirection, PostOnlyParam, SpotMarket,
     },
 };
 use rust_decimal::Decimal;
@@ -277,13 +274,8 @@ fn scale_decimal_to_i64(x: Decimal, target: u32) -> i64 {
 
 impl PlaceOrder {
     pub fn to_order_params(self, context: Context) -> OrderParams {
-        let target_scale = if let MarketType::Perp = self.market.market_type {
-            BASE_PRECISION as u32
-        } else {
-            let config = spot_market_config_by_index(context, self.market.market_index)
-                .expect("market exists");
-            config.precision as u32
-        };
+        let target_scale =
+            get_market_precision(context, self.market.market_index, self.market.market_type);
         let base_amount = scale_decimal_to_u64(self.amount.abs(), target_scale);
         let price = if self.oracle_price_offset.is_none() {
             scale_decimal_to_u64(self.price, PRICE_PRECISION as u32)
@@ -376,29 +368,44 @@ pub struct GetPositionsResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MarketInfo {
     #[serde(rename = "marketIndex")]
     market_id: u16,
-    symbol: &'static str,
-    precision: u8,
+    symbol: String,
+    price_step: Decimal,
+    amount_step: Decimal,
+    min_order_size: Decimal,
 }
 
-impl From<SpotMarketConfig<'static>> for MarketInfo {
-    fn from(value: SpotMarketConfig<'static>) -> Self {
+impl From<SpotMarket> for MarketInfo {
+    fn from(value: SpotMarket) -> Self {
         Self {
             market_id: value.market_index,
-            symbol: value.symbol,
-            precision: value.precision_exp,
+            symbol: unsafe { core::str::from_utf8_unchecked(&value.name) }
+                .trim_end()
+                .to_string(),
+            price_step: Decimal::new(value.price_tick() as i64, PRICE_PRECISION.ilog10())
+                .normalize(),
+            amount_step: Decimal::new(value.quantity_tick() as i64, value.decimals).normalize(),
+            min_order_size: Decimal::new(value.min_order_size() as i64, value.decimals).normalize(),
         }
     }
 }
 
-impl From<PerpMarketConfig<'static>> for MarketInfo {
-    fn from(value: PerpMarketConfig<'static>) -> Self {
+impl From<PerpMarket> for MarketInfo {
+    fn from(value: PerpMarket) -> Self {
         Self {
             market_id: value.market_index,
-            symbol: value.symbol,
-            precision: 6, // i.e. USDC decimals
+            symbol: unsafe { core::str::from_utf8_unchecked(&value.name) }
+                .trim_end()
+                .to_string(),
+            price_step: Decimal::new(value.price_tick() as i64, PRICE_PRECISION.ilog10())
+                .normalize(),
+            amount_step: Decimal::new(value.quantity_tick() as i64, BASE_PRECISION.ilog10())
+                .normalize(),
+            min_order_size: Decimal::new(value.min_order_size() as i64, BASE_PRECISION.ilog10())
+                .normalize(),
         }
     }
 }
@@ -526,15 +533,10 @@ impl PriceLevel {
     }
 }
 
-/// Return the number of units in a whole token for this market
+/// Return the total units of 1 whole token for this market
 #[inline]
 fn get_market_precision(context: Context, market_index: u16, market_type: MarketType) -> u32 {
-    if let MarketType::Perp = market_type {
-        BASE_PRECISION as u32
-    } else {
-        let config = spot_market_config_by_index(context, market_index).expect("market exists");
-        config.precision as u32
-    }
+    10_u32.pow(get_market_decimals(context, market_index, market_type))
 }
 
 /// Return the number of decimal places for the market
@@ -543,8 +545,8 @@ fn get_market_decimals(context: Context, market_index: u16, market_type: MarketT
     if let MarketType::Perp = market_type {
         BASE_PRECISION.ilog10()
     } else {
-        let config = spot_market_config_by_index(context, market_index).expect("market exists");
-        config.precision_exp as u32
+        let market = spot_market_config_by_index(context, market_index).expect("market exists");
+        market.decimals
     }
 }
 

@@ -16,7 +16,8 @@ export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 drift-gateway --dev https://api.devnet.solana.com
 
 # or mainnet
-drift-gateway https://api.mainnet-beta.solana.com
+# NB: `api.mainnet-beta.solana.com`` cannot be used due to rate limits on certain RPC calls
+drift-gateway https://rpc-provider.example.com
 ```
 
 with docker
@@ -49,18 +50,26 @@ Please refer to https://drift-labs.github.io/v2-teacher/ for further examples an
 
 ### Get Market Info
 gets info on all available spot & perp markets
+
+NB: spot marketIndex `0`/USDC is non-tradable
 ```bash
 $ curl localhost:8080/v2/markets
 ```
 
 **Response**
+- `priceStep` smallest order price increment for the market
+- `amountStep` smallest order amount increment for the market
+- `minOrderSize` minimum order amount for the market
+
 ```json
 {
   "spot": [
     {
-      "marketIndex": 0,
-      "symbol": "USDC",
-      "precision": 6
+      "marketIndex": 1,
+      "symbol": "SOL",
+      "priceStep": "0.0001",
+      "amountStep": "0.1",
+      "minOrderSize": "0.1"
     },
     // ...
   ],
@@ -68,10 +77,12 @@ $ curl localhost:8080/v2/markets
     {
       "marketIndex": 0,
       "symbol": "SOL-PERP",
-      "precision": 6
+      "priceStep": "0.0001",
+      "amountStep": "0.01",
+      "minOrderSize": "0.01"
     },
-  ]
     // ...
+  ]
 }
 ```
 
@@ -335,4 +346,9 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
   "code": 500,
   "reason": "AccountNotFound: pubkey=FQHZg9yU2o5uN9ERQyeTNNAMe3JWf13gce2DUj6x2HTv"
 }
+```
+
+The free _api.mainnet-beta.solana.com_RPC cannot be used due to rate-limits on `getProgramAccounts` calls
+```rust
+Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(410), ...
 ```
