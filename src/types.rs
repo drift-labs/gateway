@@ -548,7 +548,7 @@ pub(crate) fn get_market_decimals(
 mod tests {
     use drift_sdk::{
         constants::BASE_PRECISION,
-        types::{Context, MarketType, OrderType, PositionDirection},
+        types::{MarketType, OrderType, PositionDirection},
     };
     use std::str::FromStr;
 
@@ -573,7 +573,7 @@ mod tests {
                 market: Market::perp(0),
                 ..Default::default()
             };
-            let order_params = p.to_order_params(8);
+            let order_params = p.to_order_params(9);
             assert_eq!(order_params.base_asset_amount, expected);
             assert_eq!(
                 order_params.price,
@@ -584,12 +584,11 @@ mod tests {
 
     #[test]
     fn place_order_to_order_spot() {
-        let context = Context::MainNet;
         let cases = [
             ("0.1234", 123_400u64, 6),
-            ("123", 123_000_000_000, 8),
-            ("1.23", 1_230_000_000, 8),
-            ("-1.23", 1_230_000_000, 8),
+            ("123", 123_000_000_000, 9),
+            ("1.23", 1_230_000_000, 9),
+            ("-1.23", 1_230_000_000, 9),
             ("5.123456789", 512_345_678, 8), // truncates extra decimals
         ];
         for (input, expected, base_decimals) in cases {
@@ -630,7 +629,7 @@ mod tests {
             oracle_price_offset: -500_000,
             ..Default::default()
         };
-        let order = Order::from_sdk_order(o, BASE_PRECISION.ilog10() as u8);
+        let order = Order::from_sdk_order(o, BASE_PRECISION.ilog10());
         assert_eq!(order.price, Decimal::ZERO,);
 
         assert_eq!(order.oracle_price_offset, Decimal::from_str("-0.5").ok());
@@ -639,9 +638,9 @@ mod tests {
     #[test]
     fn order_from_sdk_order() {
         let cases = [
-            (1_230_400_000_u64, Decimal::from_str("1.2304").unwrap(), 6),
-            (123_000_000_000, Decimal::from_str("123.0").unwrap(), 8),
-            (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 8),
+            (1_230_400_000_u64, Decimal::from_str("1.2304").unwrap(), 9),
+            (123_000_000_000, Decimal::from_str("123.0").unwrap(), 9),
+            (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 9),
         ];
         for (input, expected, base_decimals) in cases {
             let o = drift_sdk::types::Order {
@@ -663,7 +662,7 @@ mod tests {
             oracle_price_offset: Decimal::from_str("0.1").ok(),
             ..Default::default()
         };
-        let order_params = m.to_order_params(8);
+        let order_params = m.to_order_params(9);
 
         assert_eq!(order_params.direction, Some(PositionDirection::Short));
         assert_eq!(order_params.base_asset_amount, Some(500_000_000));
@@ -676,7 +675,7 @@ mod tests {
             oracle_price_offset: Decimal::from_str("-2").ok(),
             ..Default::default()
         };
-        let order_params = m.to_order_params(8);
+        let order_params = m.to_order_params(9);
 
         assert_eq!(order_params.direction, Some(PositionDirection::Long));
         assert_eq!(order_params.base_asset_amount, Some(12_000_000_000));
