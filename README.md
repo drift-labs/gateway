@@ -202,12 +202,12 @@ localhost:8080/v2/positions
     {
       "amount": "0.400429",
       "type": "deposit",
-      "market_id": 0
+      "marketIndex": 0
     },
     {
       "amount": "9.971961702",
       "type": "deposit",
-      "market_id": 1
+      "marketIndex": 1
     }
   ],
   "perp": []

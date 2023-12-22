@@ -10,9 +10,10 @@ use log::error;
 use thiserror::Error;
 
 use crate::types::{
-    AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest,
-    GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse,
-    ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest, SpotPosition, TxResponse,
+    get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
+    GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
+    GetPositionsResponse, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
+    SpotPosition, TxResponse,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -188,7 +189,11 @@ impl AppState {
                         true
                     }
                 })
-                .map(|o| Order::from_sdk_order(o, self.context))
+                .map(|o| {
+                    let base_decimals =
+                        get_market_decimals(self.context, o.market_index, o.market_type);
+                    Order::from_sdk_order(o, base_decimals)
+                })
                 .collect(),
         })
     }
@@ -212,7 +217,11 @@ impl AppState {
             .place
             .orders
             .into_iter()
-            .map(|o| o.to_order_params(self.context))
+            .map(|o| {
+                let base_decimals =
+                    get_market_decimals(self.context, o.market.market_index, o.market.market_type);
+                o.to_order_params(base_decimals)
+            })
             .collect();
 
         let sub_account = self.wallet.sub_account(sub_account_id);
@@ -259,7 +268,11 @@ impl AppState {
         let orders = req
             .orders
             .into_iter()
-            .map(|o| o.to_order_params(self.context))
+            .map(|o| {
+                let base_decimals =
+                    get_market_decimals(self.context, o.market.market_index, o.market.market_type);
+                o.to_order_params(base_decimals)
+            })
             .collect();
         let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
             .place_orders(orders)
@@ -287,14 +300,13 @@ impl AppState {
                 if let Some(onchain_order) =
                     account_data.orders.iter().find(|x| x.order_id == order_id)
                 {
-                    params.push((
-                        order_id,
-                        order.to_order_params(
-                            onchain_order.market_index,
-                            onchain_order.market_type,
-                            self.context,
-                        ),
-                    ));
+                    let base_decimals = get_market_decimals(
+                        self.context,
+                        onchain_order.market_index,
+                        onchain_order.market_type,
+                    );
+                    params.push((order_id, order.to_order_params(base_decimals)));
+                    continue;
                 }
             } else if let Some(user_order_id) = order.user_order_id {
                 if let Some(onchain_order) = account_data
@@ -302,22 +314,21 @@ impl AppState {
                     .iter()
                     .find(|x| x.user_order_id == user_order_id)
                 {
-                    params.push((
-                        onchain_order.order_id,
-                        order.to_order_params(
-                            onchain_order.market_index,
-                            onchain_order.market_type,
-                            self.context,
-                        ),
-                    ));
+                    let base_decimals = get_market_decimals(
+                        self.context,
+                        onchain_order.market_index,
+                        onchain_order.market_type,
+                    );
+                    params.push((onchain_order.order_id, order.to_order_params(base_decimals)));
+                    continue;
                 }
-            } else {
-                return Err(ControllerError::UnknownOrderId(
-                    order
-                        .order_id
-                        .unwrap_or(order.user_order_id.unwrap_or(0) as u32),
-                ));
             }
+
+            return Err(ControllerError::UnknownOrderId(
+                order
+                    .order_id
+                    .unwrap_or(order.user_order_id.unwrap_or(0) as u32),
+            ));
         }
 
         let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(account_data))
