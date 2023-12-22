@@ -3,14 +3,11 @@
 //! - wrappers for presenting drift program types with less implementation detail
 //!
 use drift_sdk::{
-    constants::{
-        spot_market_config_by_index, PerpMarketConfig, SpotMarketConfig, BASE_PRECISION,
-        PRICE_PRECISION,
-    },
+    constants::{spot_market_config_by_index, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
     types::{
-        self as sdk_types, Context, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
-        PostOnlyParam,
+        self as sdk_types, Context, MarketPrecision, MarketType, ModifyOrderParams, OrderParams,
+        PerpMarket, PositionDirection, PostOnlyParam, SpotMarket,
     },
 };
 use rust_decimal::Decimal;
@@ -40,9 +37,7 @@ pub struct Order {
 }
 
 impl Order {
-    pub fn from_sdk_order(value: sdk_types::Order, context: Context) -> Self {
-        let decimals = get_market_decimals(context, value.market_index, value.market_type);
-
+    pub fn from_sdk_order(value: sdk_types::Order, base_decimals: u32) -> Self {
         // 0 = long
         // 1 = short
         let to_sign = 1_i64 - 2 * (value.direction as i64);
@@ -51,8 +46,8 @@ impl Order {
             market_index: value.market_index,
             market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
-            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, decimals),
-            filled: Decimal::new(value.base_asset_amount_filled as i64, decimals),
+            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
+            filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
@@ -101,11 +96,12 @@ where
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SpotPosition {
     amount: Decimal,
     #[serde(rename = "type")]
     balance_type: String, // deposit or borrow
-    market_id: u16,
+    market_index: u16,
 }
 
 impl SpotPosition {
@@ -116,8 +112,9 @@ impl SpotPosition {
         // TODO: handle error
         let token_amount = value.get_token_amount(spot_market).expect("ok");
         Self {
-            amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals),
-            market_id: value.market_index,
+            amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals)
+                .normalize(),
+            market_index: value.market_index,
             balance_type: if value.balance_type == Default::default() {
                 "deposit".into()
             } else {
@@ -128,22 +125,24 @@ impl SpotPosition {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PerpPosition {
     amount: Decimal,
     average_entry: Decimal,
-    market_id: u16,
+    market_index: u16,
 }
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
-        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
+        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10()).normalize();
         Self {
             amount,
-            market_id: value.market_index,
+            market_index: value.market_index,
             average_entry: Decimal::new(
                 value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1),
                 PRICE_PRECISION.ilog10(),
-            ),
+            )
+            .normalize(),
         }
     }
 }
@@ -166,13 +165,8 @@ pub struct ModifyOrder {
 }
 
 impl ModifyOrder {
-    pub fn to_order_params(
-        self,
-        market_index: u16,
-        market_type: MarketType,
-        context: Context,
-    ) -> ModifyOrderParams {
-        let target_scale = get_market_precision(context, market_index, market_type);
+    pub fn to_order_params(self, base_decimals: u32) -> ModifyOrderParams {
+        let target_scale = 10_u32.pow(base_decimals);
 
         let (amount, direction) = if let Some(base_amount) = self.amount {
             let direction = if base_amount.is_sign_negative() {
@@ -217,7 +211,7 @@ pub struct PlaceOrdersRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PlaceOrder {
     #[serde(flatten)]
-    market: Market,
+    pub market: Market,
     amount: Decimal,
     #[serde(default)]
     price: Decimal,
@@ -276,14 +270,8 @@ fn scale_decimal_to_i64(x: Decimal, target: u32) -> i64 {
 }
 
 impl PlaceOrder {
-    pub fn to_order_params(self, context: Context) -> OrderParams {
-        let target_scale = if let MarketType::Perp = self.market.market_type {
-            BASE_PRECISION as u32
-        } else {
-            let config = spot_market_config_by_index(context, self.market.market_index)
-                .expect("market exists");
-            config.precision as u32
-        };
+    pub fn to_order_params(self, base_decimals: u32) -> OrderParams {
+        let target_scale = 10_u32.pow(base_decimals);
         let base_amount = scale_decimal_to_u64(self.amount.abs(), target_scale);
         let price = if self.oracle_price_offset.is_none() {
             scale_decimal_to_u64(self.price, PRICE_PRECISION as u32)
@@ -376,29 +364,44 @@ pub struct GetPositionsResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MarketInfo {
     #[serde(rename = "marketIndex")]
     market_id: u16,
-    symbol: &'static str,
-    precision: u8,
+    symbol: String,
+    price_step: Decimal,
+    amount_step: Decimal,
+    min_order_size: Decimal,
 }
 
-impl From<SpotMarketConfig<'static>> for MarketInfo {
-    fn from(value: SpotMarketConfig<'static>) -> Self {
+impl From<SpotMarket> for MarketInfo {
+    fn from(value: SpotMarket) -> Self {
         Self {
             market_id: value.market_index,
-            symbol: value.symbol,
-            precision: value.precision_exp,
+            symbol: unsafe { core::str::from_utf8_unchecked(&value.name) }
+                .trim_end()
+                .to_string(),
+            price_step: Decimal::new(value.price_tick() as i64, PRICE_PRECISION.ilog10())
+                .normalize(),
+            amount_step: Decimal::new(value.quantity_tick() as i64, value.decimals).normalize(),
+            min_order_size: Decimal::new(value.min_order_size() as i64, value.decimals).normalize(),
         }
     }
 }
 
-impl From<PerpMarketConfig<'static>> for MarketInfo {
-    fn from(value: PerpMarketConfig<'static>) -> Self {
+impl From<PerpMarket> for MarketInfo {
+    fn from(value: PerpMarket) -> Self {
         Self {
             market_id: value.market_index,
-            symbol: value.symbol,
-            precision: 6, // i.e. USDC decimals
+            symbol: unsafe { core::str::from_utf8_unchecked(&value.name) }
+                .trim_end()
+                .to_string(),
+            price_step: Decimal::new(value.price_tick() as i64, PRICE_PRECISION.ilog10())
+                .normalize(),
+            amount_step: Decimal::new(value.quantity_tick() as i64, BASE_PRECISION.ilog10())
+                .normalize(),
+            min_order_size: Decimal::new(value.min_order_size() as i64, BASE_PRECISION.ilog10())
+                .normalize(),
         }
     }
 }
@@ -526,25 +529,18 @@ impl PriceLevel {
     }
 }
 
-/// Return the number of units in a whole token for this market
-#[inline]
-fn get_market_precision(context: Context, market_index: u16, market_type: MarketType) -> u32 {
-    if let MarketType::Perp = market_type {
-        BASE_PRECISION as u32
-    } else {
-        let config = spot_market_config_by_index(context, market_index).expect("market exists");
-        config.precision as u32
-    }
-}
-
 /// Return the number of decimal places for the market
 #[inline]
-fn get_market_decimals(context: Context, market_index: u16, market_type: MarketType) -> u32 {
+pub(crate) fn get_market_decimals(
+    context: Context,
+    market_index: u16,
+    market_type: MarketType,
+) -> u32 {
     if let MarketType::Perp = market_type {
         BASE_PRECISION.ilog10()
     } else {
-        let config = spot_market_config_by_index(context, market_index).expect("market exists");
-        config.precision_exp as u32
+        let market = spot_market_config_by_index(context, market_index).expect("market exists");
+        market.decimals
     }
 }
 
@@ -552,7 +548,7 @@ fn get_market_decimals(context: Context, market_index: u16, market_type: MarketT
 mod tests {
     use drift_sdk::{
         constants::BASE_PRECISION,
-        types::{Context, MarketType, OrderType, PositionDirection},
+        types::{MarketType, OrderType, PositionDirection},
     };
     use std::str::FromStr;
 
@@ -577,7 +573,7 @@ mod tests {
                 market: Market::perp(0),
                 ..Default::default()
             };
-            let order_params = p.to_order_params(Context::DevNet);
+            let order_params = p.to_order_params(9);
             assert_eq!(order_params.base_asset_amount, expected);
             assert_eq!(
                 order_params.price,
@@ -589,21 +585,20 @@ mod tests {
     #[test]
     fn place_order_to_order_spot() {
         let cases = [
-            ("0.1234", 123_400u64, 0_u16),
-            ("123", 123_000_000_000, 1),
-            ("1.23", 1_230_000_000, 1),
-            ("-1.23", 1_230_000_000, 1),
-            ("5.123456789", 512_345_678, 4), // truncates extra decimals
+            ("0.1234", 123_400u64, 6),
+            ("123", 123_000_000_000, 9),
+            ("1.23", 1_230_000_000, 9),
+            ("-1.23", 1_230_000_000, 9),
+            ("5.123456789", 512_345_678, 8), // truncates extra decimals
         ];
-        for (input, expected, market_index) in cases {
+        for (input, expected, base_decimals) in cases {
             let p = PlaceOrder {
                 amount: Decimal::from_str(input).unwrap(),
                 price: Decimal::from_str(input).unwrap(),
-                market: Market::spot(market_index),
                 ..Default::default()
             };
             let is_short = p.amount.is_sign_negative();
-            let order_params = p.to_order_params(Context::MainNet);
+            let order_params = p.to_order_params(base_decimals);
             assert_eq!(order_params.base_asset_amount, expected);
             if is_short {
                 assert_eq!(order_params.direction, PositionDirection::Short);
@@ -622,7 +617,7 @@ mod tests {
             market: Market::perp(0),
             ..Default::default()
         };
-        let order = p.to_order_params(Context::MainNet);
+        let order = p.to_order_params(6);
         assert_eq!(order.price, 0);
         assert_eq!(order.oracle_price_offset, Some(-500_000));
 
@@ -634,7 +629,7 @@ mod tests {
             oracle_price_offset: -500_000,
             ..Default::default()
         };
-        let order = Order::from_sdk_order(o, Context::MainNet);
+        let order = Order::from_sdk_order(o, BASE_PRECISION.ilog10());
         assert_eq!(order.price, Decimal::ZERO,);
 
         assert_eq!(order.oracle_price_offset, Decimal::from_str("-0.5").ok());
@@ -643,23 +638,18 @@ mod tests {
     #[test]
     fn order_from_sdk_order() {
         let cases = [
-            (
-                1_230_400_000_u64,
-                Decimal::from_str("1.2304").unwrap(),
-                0_u16,
-            ),
-            (123_000_000_000, Decimal::from_str("123.0").unwrap(), 1),
-            (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 4),
+            (1_230_400_000_u64, Decimal::from_str("1.2304").unwrap(), 9),
+            (123_000_000_000, Decimal::from_str("123.0").unwrap(), 9),
+            (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 9),
         ];
-        for (input, expected, market_index) in cases {
+        for (input, expected, base_decimals) in cases {
             let o = drift_sdk::types::Order {
                 base_asset_amount: input,
                 price: input,
-                market_index,
                 market_type: MarketType::Perp,
                 ..Default::default()
             };
-            let gateway_order = Order::from_sdk_order(o, Context::MainNet);
+            let gateway_order = Order::from_sdk_order(o, base_decimals);
             assert_eq!(gateway_order.amount, expected);
         }
     }
@@ -672,7 +662,7 @@ mod tests {
             oracle_price_offset: Decimal::from_str("0.1").ok(),
             ..Default::default()
         };
-        let order_params = m.to_order_params(1, MarketType::Spot, Context::MainNet);
+        let order_params = m.to_order_params(9);
 
         assert_eq!(order_params.direction, Some(PositionDirection::Short));
         assert_eq!(order_params.base_asset_amount, Some(500_000_000));
@@ -685,7 +675,7 @@ mod tests {
             oracle_price_offset: Decimal::from_str("-2").ok(),
             ..Default::default()
         };
-        let order_params = m.to_order_params(1, MarketType::Spot, Context::MainNet);
+        let order_params = m.to_order_params(9);
 
         assert_eq!(order_params.direction, Some(PositionDirection::Long));
         assert_eq!(order_params.base_asset_amount, Some(12_000_000_000));
