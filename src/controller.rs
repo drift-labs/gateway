@@ -78,7 +78,7 @@ impl AppState {
             wallet,
             context,
             client: Arc::new(client),
-            dlob_client: DLOBClient::new(dlob_endpoint),
+            dlob_client: DLOBClient::new(dlob_endpoint, context),
         }
     }
 
@@ -97,7 +97,8 @@ impl AppState {
         let sub_account = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
         let builder =
-            TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data));
+            TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
+                .payer(self.wallet.signer());
 
         let tx = if let Some(market) = req.market {
             builder.cancel_orders((market.market_index, market.market_type), None)
@@ -230,7 +231,8 @@ impl AppState {
             self.context,
             self.wallet.sub_account(0),
             Cow::Borrowed(&account_data),
-        );
+        )
+        .payer(self.wallet.signer());
 
         let tx = if let Some(market) = req.cancel.market {
             builder.cancel_orders((market.market_index, market.market_type), None)
@@ -275,6 +277,7 @@ impl AppState {
             })
             .collect();
         let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
+            .payer(self.wallet.signer())
             .place_orders(orders)
             .build();
 
@@ -332,6 +335,7 @@ impl AppState {
         }
 
         let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(account_data))
+            .payer(self.wallet.signer())
             .modify_orders(params)
             .build();
 
