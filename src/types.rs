@@ -135,12 +135,13 @@ pub struct PerpPosition {
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
-        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10()).normalize();
+        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
+        let average_entry =
+            Decimal::new(value.quote_entry_amount.abs(), PRICE_PRECISION.ilog10()) / amount;
         Self {
-            amount,
+            amount: amount.normalize(),
             market_index: value.market_index,
-            average_entry: Decimal::new(value.quote_entry_amount.abs(), PRICE_PRECISION.ilog10())
-                .normalize(),
+            average_entry: average_entry.normalize().round_dp(4),
         }
     }
 }
