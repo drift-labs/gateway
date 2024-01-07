@@ -17,6 +17,7 @@ use types::{
 
 mod controller;
 mod types;
+mod websocket;
 
 #[derive(serde::Deserialize)]
 struct Args {
@@ -161,6 +162,13 @@ async fn main() -> std::io::Result<()> {
             state.default_sub_account()
         );
     }
+
+    websocket::start_ws_server(
+        format!("{}:1337", &config.host).as_str(),
+        drift_sdk::utils::http_to_ws(config.rpc_host.as_str()).expect("ws endpoint"),
+        state.wallet.clone(),
+    )
+    .await;
 
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(state.clone())).service(

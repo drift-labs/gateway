@@ -1361,7 +1361,7 @@ dependencies = [
 [[package]]
 name = "drift"
 version = "2.48.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#641158dbe3d9472290c5cd7923c70247e17bfa2a"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#481e5cda6bf9308d069e42ed9aee62ad5fcc814c"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1375,6 +1375,7 @@ dependencies = [
  "num-traits",
  "phoenix-v1",
  "pyth-client",
+ "serde",
  "serum_dex",
  "solana-program",
  "solana-security-txt",
@@ -1396,12 +1397,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.21.0",
 ]
 
 [[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#641158dbe3d9472290c5cd7923c70247e17bfa2a"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#481e5cda6bf9308d069e42ed9aee62ad5fcc814c"
 dependencies = [
  "anchor-lang",
  "base64 0.13.1",
@@ -5439,9 +5442,9 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 
 [[package]]
 name = "winnow"
-version = "0.5.32"
+version = "0.5.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8434aeec7b290e8da5c3f0d628cb0eac6cabcb31d14bb74f779a08109a5914d6"
+checksum = "b7520bbdec7211caa7c4e682eb1fbe07abe20cee6756b6e00f537c82c11816aa"
 dependencies = [
  "memchr",
 ]

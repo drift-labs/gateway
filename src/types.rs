@@ -139,11 +139,8 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
         Self {
             amount,
             market_index: value.market_index,
-            average_entry: Decimal::new(
-                value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1),
-                PRICE_PRECISION.ilog10(),
-            )
-            .normalize(),
+            average_entry: Decimal::new(value.quote_entry_amount.abs(), PRICE_PRECISION.ilog10())
+                .normalize(),
         }
     }
 }

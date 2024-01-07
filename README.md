@@ -314,6 +314,38 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 }'
 ```
 
+## WebSockets
+Websocket API is provided for live event streams by default at port `127.0.0.1:1337`
+
+## Subscribing
+Subscribe to order updates by subAccount
+```json
+{"method":"subscribe", "channel":"orders", "subAccountId":0}
+```
+
+Subscribe to fills by subAccount
+```json
+{"method":"subscribe", "channel":"fills", "subAccountId":0}
+```
+
+## Event Payloads
+```json
+{"data":{"orderCancel":{"taker":null,"maker":[123,114,188,162,93,176,39,33,200,153,220,221,113,249,248,6,149,193,139,86,204,155,55,129,239,86,42,42,217,140,48,77],"taker_order_id":0,"maker_order_id":130,"ts":1704617675}},"channel":"orders","subAccountId":0}
+
+{"data":{"orderCreate":{"order":{"slot":270811384,"price":70000000,"baseAssetAmount":1120000000,"baseAssetAmountFilled":0,"quoteAssetAmountFilled":0,"triggerPrice":0,"auctionStartPrice":0,"auctionEndPrice":0,"maxTs":0,"oraclePriceOffset":0,"orderId":131,"marketIndex":0,"status":"open","orderType":"limit","marketType":"perp","userOrderId":0,"existingPositionDirection":"long","direction":"long","reduceOnly":false,"postOnly":true,"immediateOrCancel":false,"triggerCondition":"above","auctionDuration":0,"padding":[0,0,0]},"ts":1704617675}},"channel":"orders","subAccountId":0}
+
+{"data":{"orderCancel":{"taker":null,"maker":[123,114,188,162,93,176,39,33,200,153,220,221,113,249,248,6,149,193,139,86,204,155,55,129,239,86,42,42,217,140,48,77],"taker_order_id":0,"maker_order_id":131,"ts":1704617722}},"channel":"orders","subAccountId":0}
+
+{"data":{"orderCreate":{"order":{"slot":270811986,"price":120000000,"baseAssetAmount":1230000000,"baseAssetAmountFilled":0,"quoteAssetAmountFilled":0,"triggerPrice":0,"auctionStartPrice":0,"auctionEndPrice":0,"maxTs":0,"oraclePriceOffset":0,"orderId":132,"marketIndex":0,"status":"open","orderType":"limit","marketType":"perp","userOrderId":101,"existingPositionDirection":"long","direction":"short","reduceOnly":false,"postOnly":true,"immediateOrCancel":false,"triggerCondition":"above","auctionDuration":0,"padding":[0,0,0]},"ts":1704617899}},"channel":"orders","subAccountId":0}
+
+{"data":{"orderCreate":{"order":{"slot":270811986,"price":0,"baseAssetAmount":1230000000,"baseAssetAmountFilled":0,"quoteAssetAmountFilled":0,"triggerPrice":0,"auctionStartPrice":0,"auctionEndPrice":0,"maxTs":0,"oraclePriceOffset":5000000,"orderId":133,"marketIndex":0,"status":"open","orderType":"limit","marketType":"perp","userOrderId":102,"existingPositionDirection":"long","direction":"long","reduceOnly":false,"postOnly":false,"immediateOrCancel":false,"triggerCondition":"above","auctionDuration":0,"padding":[0,0,0]},"ts":1704617899}},"channel":"orders","subAccountId":0}
+
+{"data":{"orderFill":{"maker":null,"maker_fee":0,"maker_order_id":0,"maker_side":null,"taker":[123,114,188,162,93,176,39,33,200,153,220,221,113,249,248,6,149,193,139,86,204,155,55,129,239,86,42,42,217,140,48,77],"taker_fee":28972,"taker_order_id":133,"taker_side":"long","base_asset_amount_filled":1230000000,"market_index":0,"market_type":"perp","ts":1704617904}},"channel":"fills","subAccountId":0}
+
+{"data":{"orderFill":{"maker":null,"maker_fee":0,"maker_order_id":0,"maker_side":null,"taker":[14,84,98,105,43,15,235,33,183,3,247,157,215,136,252,130,37,24,176,25,139,29,222,146,81,170,202,144,158,196,73,242],"taker_fee":7915,"taker_order_id":3195968,"taker_side":"long","base_asset_amount_filled":420000000,"market_index":0,"market_type":"perp","ts":1704617904}},"channel":"fills","subAccountId":0}
+```
+
+
 ## Delegated Signing Mode
 Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
 In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY`.

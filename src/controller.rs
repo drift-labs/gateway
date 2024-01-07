@@ -30,7 +30,7 @@ pub enum ControllerError {
 
 #[derive(Clone)]
 pub struct AppState {
-    wallet: Wallet,
+    pub wallet: Wallet,
     client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
 }
