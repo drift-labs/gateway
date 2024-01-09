@@ -345,7 +345,7 @@ event payloads can be distinguished by "channel" field and the "data" payload is
 ```
 
 **order expired**
-if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.  
+- if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.  
 ```json
 {
     "data": {
@@ -398,7 +398,7 @@ if an order's `maxTs` is reached then it can be cancelled by protocol keeper bot
 
 **order fill**
 
-- `fee``: positive amounts are (maker) rebates
+- `fee`: positive amounts are (maker) rebates
 
 ```json
 {
