@@ -3,15 +3,18 @@
 //! - wrappers for presenting drift program types with less implementation detail
 //!
 use drift_sdk::{
-    constants::{spot_market_config_by_index, BASE_PRECISION, PRICE_PRECISION},
+    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
     types::{
-        self as sdk_types, Context, MarketPrecision, MarketType, ModifyOrderParams, OrderParams,
-        PerpMarket, PositionDirection, PostOnlyParam, SpotMarket,
+        self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
+        PositionDirection, PostOnlyParam, SpotMarket,
     },
 };
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+
+/// decimal places in price values
+pub const PRICE_DECIMALS: u32 = PRICE_PRECISION.ilog10();
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -45,7 +48,7 @@ impl Order {
         Order {
             market_index: value.market_index,
             market_type: value.market_type,
-            price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
+            price: Decimal::new(value.price as i64, PRICE_DECIMALS),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
             filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
             immediate_or_cancel: value.immediate_or_cancel,
@@ -59,7 +62,7 @@ impl Order {
             } else {
                 Some(Decimal::new(
                     value.oracle_price_offset as i64,
-                    PRICE_PRECISION.ilog10(),
+                    PRICE_DECIMALS,
                 ))
             },
         }
@@ -134,15 +137,12 @@ pub struct PerpPosition {
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
-        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10()).normalize();
+        let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
+        let average_entry = Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS) / amount;
         Self {
-            amount,
+            amount: amount.normalize(),
             market_index: value.market_index,
-            average_entry: Decimal::new(
-                value.quote_entry_amount.abs() / value.base_asset_amount.abs().max(1),
-                PRICE_PRECISION.ilog10(),
-            )
-            .normalize(),
+            average_entry: average_entry.normalize().round_dp(4),
         }
     }
 }
@@ -321,6 +321,12 @@ pub struct Market {
 }
 
 impl Market {
+    pub fn new(market_index: u16, market_type: MarketType) -> Self {
+        Self {
+            market_index,
+            market_type,
+        }
+    }
     pub fn spot(index: u16) -> Self {
         Self {
             market_index: index,
@@ -453,17 +459,12 @@ pub struct CancelAndPlaceRequest {
 /// Serialize DLOB with human readable numeric values
 pub struct OrderbookL2 {
     inner: L2Orderbook,
-    context: Context,
-    market: Market,
+    decimals: u32,
 }
 
 impl OrderbookL2 {
-    pub fn new(inner: L2Orderbook, market: Market, context: Context) -> Self {
-        Self {
-            inner,
-            market,
-            context,
-        }
+    pub fn new(inner: L2Orderbook, decimals: u32) -> Self {
+        Self { inner, decimals }
     }
 }
 
@@ -478,16 +479,14 @@ impl Serialize for OrderbookL2 {
             "bids",
             &PriceLevelSerializer {
                 inner: self.inner.bids.as_slice(),
-                market: self.market,
-                context: self.context,
+                decimals: self.decimals,
             },
         )?;
         map.serialize_entry(
             "asks",
             &PriceLevelSerializer {
                 inner: self.inner.asks.as_slice(),
-                market: self.market,
-                context: self.context,
+                decimals: self.decimals,
             },
         )?;
         map.end()
@@ -496,8 +495,8 @@ impl Serialize for OrderbookL2 {
 
 struct PriceLevelSerializer<'a> {
     inner: &'a [L2Level],
-    market: Market,
-    context: Context,
+    /// decimal precision of the asset
+    decimals: u32,
 }
 
 impl<'a> Serialize for PriceLevelSerializer<'a> {
@@ -505,11 +504,7 @@ impl<'a> Serialize for PriceLevelSerializer<'a> {
     where
         S: Serializer,
     {
-        serializer.collect_seq(
-            self.inner
-                .iter()
-                .map(|l| PriceLevel::new(l, self.market, self.context)),
-        )
+        serializer.collect_seq(self.inner.iter().map(|l| PriceLevel::new(l, self.decimals)))
     }
 }
 
@@ -520,8 +515,7 @@ pub struct PriceLevel {
 }
 
 impl PriceLevel {
-    pub fn new(level: &dlob::L2Level, market: Market, context: Context) -> Self {
-        let decimals = get_market_decimals(context, market.market_index, market.market_type);
+    pub fn new(level: &dlob::L2Level, decimals: u32) -> Self {
         Self {
             price: Decimal::new(level.price as i64, PRICE_PRECISION.ilog10()),
             amount: Decimal::new(level.size as i64, decimals),
@@ -531,16 +525,14 @@ impl PriceLevel {
 
 /// Return the number of decimal places for the market
 #[inline]
-pub(crate) fn get_market_decimals(
-    context: Context,
-    market_index: u16,
-    market_type: MarketType,
-) -> u32 {
-    if let MarketType::Perp = market_type {
+pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) -> u32 {
+    if let MarketType::Perp = market.market_type {
         BASE_PRECISION.ilog10()
     } else {
-        let market = spot_market_config_by_index(context, market_index).expect("market exists");
-        market.decimals
+        let spot_market = program_data
+            .spot_market_config_by_index(market.market_index)
+            .expect("market exists");
+        spot_market.decimals
     }
 }
 

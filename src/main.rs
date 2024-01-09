@@ -9,7 +9,7 @@ use log::{error, info};
 use controller::{AppState, ControllerError};
 use drift_sdk::Pubkey;
 use serde_json::json;
-use std::str::FromStr;
+use std::{borrow::Borrow, str::FromStr, sync::Arc};
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest,
     PlaceOrdersRequest,
@@ -17,6 +17,7 @@ use types::{
 
 mod controller;
 mod types;
+mod websocket;
 
 #[derive(serde::Deserialize)]
 struct Args {
@@ -161,6 +162,15 @@ async fn main() -> std::io::Result<()> {
             state.default_sub_account()
         );
     }
+
+    let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
+    websocket::start_ws_server(
+        format!("{}:1337", &config.host).as_str(),
+        drift_sdk::utils::http_to_ws(config.rpc_host.as_str()).expect("ws endpoint"),
+        state.wallet.clone(),
+        client.program_data(),
+    )
+    .await;
 
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(state.clone())).service(

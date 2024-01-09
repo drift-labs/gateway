@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::types::{
     get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
     GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-    GetPositionsResponse, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
+    GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
     SpotPosition, TxResponse,
 };
 
@@ -30,9 +30,8 @@ pub enum ControllerError {
 
 #[derive(Clone)]
 pub struct AppState {
-    wallet: Wallet,
-    context: Context,
-    client: Arc<DriftClient<WsAccountProvider>>,
+    pub wallet: Wallet,
+    pub client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
 }
 
@@ -76,9 +75,8 @@ impl AppState {
 
         Self {
             wallet,
-            context,
             client: Arc::new(client),
-            dlob_client: DLOBClient::new(dlob_endpoint, context),
+            dlob_client: DLOBClient::new(dlob_endpoint),
         }
     }
 
@@ -96,9 +94,12 @@ impl AppState {
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
-        let builder =
-            TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
-                .payer(self.wallet.signer());
+        let builder = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Borrowed(&account_data),
+        )
+        .payer(self.wallet.signer());
 
         let tx = if let Some(market) = req.market {
             builder.cancel_orders((market.market_index, market.market_type), None)
@@ -191,8 +192,10 @@ impl AppState {
                     }
                 })
                 .map(|o| {
-                    let base_decimals =
-                        get_market_decimals(self.context, o.market_index, o.market_type);
+                    let base_decimals = get_market_decimals(
+                        self.client.program_data(),
+                        Market::new(o.market_index, o.market_type),
+                    );
                     Order::from_sdk_order(o, base_decimals)
                 })
                 .collect(),
@@ -200,8 +203,8 @@ impl AppState {
     }
 
     pub fn get_markets(&self) -> AllMarketsResponse {
-        let spot = drift_sdk::constants::spot_market_configs(self.context);
-        let perp = drift_sdk::constants::perp_market_configs(self.context);
+        let spot = self.client.program_data().spot_market_configs();
+        let perp = self.client.program_data().perp_market_configs();
 
         AllMarketsResponse {
             spot: spot.iter().map(|x| (*x).into()).collect(),
@@ -219,8 +222,7 @@ impl AppState {
             .orders
             .into_iter()
             .map(|o| {
-                let base_decimals =
-                    get_market_decimals(self.context, o.market.market_index, o.market.market_type);
+                let base_decimals = get_market_decimals(self.client.program_data(), o.market);
                 o.to_order_params(base_decimals)
             })
             .collect();
@@ -228,7 +230,7 @@ impl AppState {
         let sub_account = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
         let builder = TransactionBuilder::new(
-            self.context,
+            self.client.program_data(),
             self.wallet.sub_account(0),
             Cow::Borrowed(&account_data),
         )
@@ -271,15 +273,18 @@ impl AppState {
             .orders
             .into_iter()
             .map(|o| {
-                let base_decimals =
-                    get_market_decimals(self.context, o.market.market_index, o.market.market_type);
+                let base_decimals = get_market_decimals(self.client.program_data(), o.market);
                 o.to_order_params(base_decimals)
             })
             .collect();
-        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(&account_data))
-            .payer(self.wallet.signer())
-            .place_orders(orders)
-            .build();
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Borrowed(&account_data),
+        )
+        .payer(self.wallet.signer())
+        .place_orders(orders)
+        .build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -304,9 +309,8 @@ impl AppState {
                     account_data.orders.iter().find(|x| x.order_id == order_id)
                 {
                     let base_decimals = get_market_decimals(
-                        self.context,
-                        onchain_order.market_index,
-                        onchain_order.market_type,
+                        self.client.program_data(),
+                        Market::new(onchain_order.market_index, onchain_order.market_type),
                     );
                     params.push((order_id, order.to_order_params(base_decimals)));
                     continue;
@@ -318,9 +322,8 @@ impl AppState {
                     .find(|x| x.user_order_id == user_order_id)
                 {
                     let base_decimals = get_market_decimals(
-                        self.context,
-                        onchain_order.market_index,
-                        onchain_order.market_type,
+                        self.client.program_data(),
+                        Market::new(onchain_order.market_index, onchain_order.market_type),
                     );
                     params.push((onchain_order.order_id, order.to_order_params(base_decimals)));
                     continue;
@@ -334,10 +337,14 @@ impl AppState {
             ));
         }
 
-        let tx = TransactionBuilder::new(self.context, sub_account, Cow::Borrowed(account_data))
-            .payer(self.wallet.signer())
-            .modify_orders(params)
-            .build();
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Borrowed(account_data),
+        )
+        .payer(self.wallet.signer())
+        .modify_orders(params)
+        .build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -348,7 +355,8 @@ impl AppState {
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
         let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
-        Ok(OrderbookL2::new(book, req.market, self.context))
+        let decimals = get_market_decimals(self.client.program_data(), req.market);
+        Ok(OrderbookL2::new(book, decimals))
     }
 }
 

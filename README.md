@@ -314,6 +314,112 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 }'
 ```
 
+## WebSockets
+Websocket API is provided for live event streams by default at port `127.0.0.1:1337`
+
+## Subscribing
+Subscribe to order and fills updates by a `subAccountId` (`0` is the drift default)
+```json
+{"method":"subscribe", "subAccountId":0}
+
+# unsubscribe
+{"method":"unsubscribe", "subAccountId":0}
+```
+
+## Event Payloads
+
+event payloads can be distinguished by "channel" field and the "data" payload is keyed by the event type
+
+**order cancelled**
+```json
+{
+    "data": {
+        "orderCancel": {
+            "orderId": 156,
+            "ts": 1704777451
+        }
+    },
+    "channel": "orders",
+    "subAccountId": 0
+}
+```
+
+**order expired**
+if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.  
+```json
+{
+    "data": {
+        "orderExpire": {
+            "orderId": 156,
+            "fee": "-0.0012",
+            "ts": 1704777451
+        }
+    },
+    "channel": "orders",
+    "subAccountId": 0
+}
+```
+
+**order created**
+- auction and trigger fields are only relevant for auction type or trigger type orders respectively.
+- `price` is shown as `0` for market and oracle orders.
+```json
+{
+   "data": {
+        "orderCreate": {
+            "order": {
+                "slot": 271243169,
+                "price": "0",
+                "amount": "0.1",
+                "filled": "0",
+                "triggerPrice": "0",
+                "auctionStartPrice": "0",
+                "auctionEndPrice": "0",
+                "maxTs": 0,
+                "oraclePriceOffset": "2",
+                "orderId": 157,
+                "marketIndex": 0,
+                "orderType": "limit",
+                "marketType": "perp",
+                "userOrderId": 102,
+                "direction": "buy",
+                "reduceOnly": false,
+                "postOnly": false,
+                "immediateOrCancel": false,
+                "auctionDuration": 0
+            },
+            "ts": 1704777347
+        }
+    },
+    "channel": "orders",
+    "subAccountId": 0
+}
+```
+
+**order fill**
+
+- `fee``: positive amounts are (maker) rebates
+
+```json
+{
+    "data": {
+        "fill": {
+            "side": "buy",
+            "fee": "0.002581",
+            "amount": "0.1",
+            "price": "103.22087",
+            "orderId": 157,
+            "ts": 1704777355
+        }
+    },
+    "channel": "fills",
+    "subAccountId": 0
+}
+```
+
+**order modify**
+Modifying an order produces a cancel event followed by a create event with the same orderId
+
 ## Delegated Signing Mode
 Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
 In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY`.
