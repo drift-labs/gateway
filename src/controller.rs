@@ -31,7 +31,7 @@ pub enum ControllerError {
 #[derive(Clone)]
 pub struct AppState {
     pub wallet: Wallet,
-    client: Arc<DriftClient<WsAccountProvider>>,
+    pub client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
 }
 
@@ -193,7 +193,7 @@ impl AppState {
                 })
                 .map(|o| {
                     let base_decimals = get_market_decimals(
-                        self.client.as_ref(),
+                        self.client.program_data(),
                         Market::new(o.market_index, o.market_type),
                     );
                     Order::from_sdk_order(o, base_decimals)
@@ -222,7 +222,7 @@ impl AppState {
             .orders
             .into_iter()
             .map(|o| {
-                let base_decimals = get_market_decimals(self.client.as_ref(), o.market);
+                let base_decimals = get_market_decimals(self.client.program_data(), o.market);
                 o.to_order_params(base_decimals)
             })
             .collect();
@@ -273,7 +273,7 @@ impl AppState {
             .orders
             .into_iter()
             .map(|o| {
-                let base_decimals = get_market_decimals(self.client.as_ref(), o.market);
+                let base_decimals = get_market_decimals(self.client.program_data(), o.market);
                 o.to_order_params(base_decimals)
             })
             .collect();
@@ -309,7 +309,7 @@ impl AppState {
                     account_data.orders.iter().find(|x| x.order_id == order_id)
                 {
                     let base_decimals = get_market_decimals(
-                        self.client.as_ref(),
+                        self.client.program_data(),
                         Market::new(onchain_order.market_index, onchain_order.market_type),
                     );
                     params.push((order_id, order.to_order_params(base_decimals)));
@@ -322,7 +322,7 @@ impl AppState {
                     .find(|x| x.user_order_id == user_order_id)
                 {
                     let base_decimals = get_market_decimals(
-                        self.client.as_ref(),
+                        self.client.program_data(),
                         Market::new(onchain_order.market_index, onchain_order.market_type),
                     );
                     params.push((onchain_order.order_id, order.to_order_params(base_decimals)));
@@ -355,7 +355,7 @@ impl AppState {
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
         let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
-        let decimals = get_market_decimals(self.client.as_ref(), req.market);
+        let decimals = get_market_decimals(self.client.program_data(), req.market);
         Ok(OrderbookL2::new(book, decimals))
     }
 }

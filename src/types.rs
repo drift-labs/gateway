@@ -3,16 +3,18 @@
 //! - wrappers for presenting drift program types with less implementation detail
 //!
 use drift_sdk::{
-    constants::{BASE_PRECISION, PRICE_PRECISION},
+    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
     },
-    AccountProvider, DriftClient,
 };
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+
+/// decimal places in price values
+pub const PRICE_DECIMALS: u32 = PRICE_PRECISION.ilog10();
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -46,7 +48,7 @@ impl Order {
         Order {
             market_index: value.market_index,
             market_type: value.market_type,
-            price: Decimal::new(value.price as i64, PRICE_PRECISION.ilog10()),
+            price: Decimal::new(value.price as i64, PRICE_DECIMALS),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
             filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
             immediate_or_cancel: value.immediate_or_cancel,
@@ -60,7 +62,7 @@ impl Order {
             } else {
                 Some(Decimal::new(
                     value.oracle_price_offset as i64,
-                    PRICE_PRECISION.ilog10(),
+                    PRICE_DECIMALS,
                 ))
             },
         }
@@ -136,8 +138,7 @@ pub struct PerpPosition {
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
         let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
-        let average_entry =
-            Decimal::new(value.quote_entry_amount.abs(), PRICE_PRECISION.ilog10()) / amount;
+        let average_entry = Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS) / amount;
         Self {
             amount: amount.normalize(),
             market_index: value.market_index,
@@ -524,15 +525,11 @@ impl PriceLevel {
 
 /// Return the number of decimal places for the market
 #[inline]
-pub(crate) fn get_market_decimals<T: AccountProvider>(
-    client: &DriftClient<T>,
-    market: Market,
-) -> u32 {
+pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) -> u32 {
     if let MarketType::Perp = market.market_type {
         BASE_PRECISION.ilog10()
     } else {
-        let spot_market = client
-            .program_data()
+        let spot_market = program_data
             .spot_market_config_by_index(market.market_index)
             .expect("market exists");
         spot_market.decimals
