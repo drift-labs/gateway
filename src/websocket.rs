@@ -3,6 +3,7 @@
 use std::ops::Neg;
 
 use drift_sdk::{
+    async_utils::retry_policy::{self},
     constants::ProgramData,
     event_subscriber::{DriftEvent, EventSubscriber, PubsubClient},
     types::{MarketType, Order, OrderType, PositionDirection},
@@ -92,6 +93,7 @@ async fn accept_connection(
                                     .await
                                     .expect("ws connect"),
                                 sub_account_address,
+                                retry_policy::exponential_backoff(3),
                             );
 
                             let join_handle = tokio::spawn({

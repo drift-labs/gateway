@@ -319,10 +319,9 @@ Websocket API is provided for live event streams by default at port `127.0.0.1:1
 
 ## Subscribing
 Subscribe to order and fills updates by a `subAccountId` (`0` is the drift default)
-```json
+```ts
 {"method":"subscribe", "subAccountId":0}
-
-# unsubscribe
+// unsubscribe
 {"method":"unsubscribe", "subAccountId":0}
 ```
 
