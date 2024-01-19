@@ -1,4 +1,4 @@
-FROM rust:1.73.0 as builder
+FROM rust:1.74.0 as builder
 
 # docker automatically sets this to architecture of the host system
 # requires DOCKER_BUILDKIT=1
