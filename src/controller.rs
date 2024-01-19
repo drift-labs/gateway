@@ -24,6 +24,8 @@ pub enum ControllerError {
     Sdk(#[from] SdkError),
     #[error("order id not found: {0}")]
     UnknownOrderId(u32),
+    #[error("{0}")]
+    BadRequest(String),
     #[error("tx failed ({code}): {reason}")]
     TxFailed { reason: String, code: u32 },
 }
@@ -101,22 +103,7 @@ impl AppState {
         )
         .payer(self.wallet.signer());
 
-        let tx = if let Some(market) = req.market {
-            builder.cancel_orders((market.market_index, market.market_type), None)
-        } else if !req.user_ids.is_empty() {
-            let order_ids = account_data
-                .orders
-                .iter()
-                .filter(|o| o.slot > 0 && req.user_ids.contains(&o.user_order_id))
-                .map(|o| o.order_id)
-                .collect();
-            builder.cancel_orders_by_id(order_ids)
-        } else if !req.ids.is_empty() {
-            builder.cancel_orders_by_id(req.ids)
-        } else {
-            builder.cancel_all_orders()
-        }
-        .build();
+        let tx = build_cancel_ix(builder, req)?.build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -236,23 +223,9 @@ impl AppState {
         )
         .payer(self.wallet.signer());
 
-        let tx = if let Some(market) = req.cancel.market {
-            builder.cancel_orders((market.market_index, market.market_type), None)
-        } else if !req.cancel.user_ids.is_empty() {
-            let order_ids = account_data
-                .orders
-                .iter()
-                .filter(|o| o.slot > 0 && req.cancel.user_ids.contains(&o.user_order_id))
-                .map(|o| o.order_id)
-                .collect();
-            builder.cancel_orders_by_id(order_ids)
-        } else if !req.cancel.ids.is_empty() {
-            builder.cancel_orders_by_id(req.cancel.ids)
-        } else {
-            builder.cancel_all_orders()
-        }
-        .place_orders(orders)
-        .build();
+        let tx = build_cancel_ix(builder, req.cancel)?
+            .place_orders(orders)
+            .build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -368,5 +341,35 @@ fn handle_tx_err(err: SdkError) -> ControllerError {
         }
     } else {
         ControllerError::Sdk(err)
+    }
+}
+
+/// helper to transform CancelOrdersRequest into its drift program ix
+fn build_cancel_ix(
+    builder: TransactionBuilder<'_>,
+    req: CancelOrdersRequest,
+) -> GatewayResult<TransactionBuilder<'_>> {
+    if let Some(market) = req.market {
+        Ok(builder.cancel_orders((market.market_index, market.market_type), None))
+    } else if req.user_ids.is_some() {
+        let user_ids = req.user_ids.unwrap();
+        if user_ids.is_empty() {
+            Err(ControllerError::BadRequest(
+                "user ids cannot be empty".to_owned(),
+            ))
+        } else {
+            Ok(builder.cancel_orders_by_user_id(user_ids))
+        }
+    } else if req.ids.is_some() {
+        let ids = req.ids.unwrap();
+        if ids.is_empty() {
+            Err(ControllerError::BadRequest(
+                "ids cannot be empty".to_owned(),
+            ))
+        } else {
+            Ok(builder.cancel_orders_by_id(ids))
+        }
+    } else {
+        Ok(builder.cancel_all_orders())
     }
 }

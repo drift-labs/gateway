@@ -251,7 +251,7 @@ $ curl localhost:8080/v2/orders -X POST \
 Returns solana tx signature on success
 
 ### Modify Orders
-like place orders but caller must specify either `orderId` or `userOrderId` to indicate which order to modify.
+like place orders but caller must specify either `orderId` or `userOrderId` to indicate which order(s) to modify.
 
 - `amount` can be modified to flip the order from long/short to bid/ask
 - the order market cannot be modified.
@@ -335,7 +335,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
     "data": {
         "orderCancel": {
             "orderId": 156,
-            "ts": 1704777451
+            "ts": 1704777451,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
         }
     },
     "channel": "orders",
@@ -351,7 +352,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
         "orderExpire": {
             "orderId": 156,
             "fee": "-0.0012",
-            "ts": 1704777451
+            "ts": 1704777451,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
         }
     },
     "channel": "orders",
@@ -387,7 +389,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
                 "immediateOrCancel": false,
                 "auctionDuration": 0
             },
-            "ts": 1704777347
+            "ts": 1704777347,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
         }
     },
     "channel": "orders",
@@ -408,7 +411,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
             "amount": "0.1",
             "price": "103.22087",
             "orderId": 157,
-            "ts": 1704777355
+            "ts": 1704777355,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
         }
     },
     "channel": "fills",
@@ -417,10 +421,36 @@ event payloads can be distinguished by "channel" field and the "data" payload is
 ```
 
 **order modify**
+
 Modifying an order produces a cancel event followed by a create event with the same orderId
+
+
+**order cancel (missing) | experimental**
+
+emitted when a cancel action was requested on an order that did not exist onchain.
+
+this event may be safely ignored, it is added in an effort to help order life-cycle tracking in certain setups.
+
+- one of `userOrderId` or `orderId` will be a non-zero value (dependent on the original tx).
+
+```json
+{
+    "data": {
+        "orderCancelMissing": {
+            "userOrderId": 5,
+            "orderId": 0,
+            "ts": 1704777451,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+        }
+    },
+    "channel": "orders",
+    "subAccountId": 0
+}
+```
 
 ## Delegated Signing Mode
 Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
+
 In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY`.
 
 Use the drift UI or Ts/Python SDK to assign a delegator key.
@@ -428,7 +458,9 @@ see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more i
 
 ## Sub-account Switching
 By default the gateway uses the drift sub-account (index 0)
+
 A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
+
 e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
 
 ### Errors

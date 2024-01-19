@@ -426,10 +426,10 @@ pub struct CancelOrdersRequest {
     pub market: Option<Market>,
     /// order Ids to cancel
     #[serde(default)]
-    pub ids: Vec<u32>,
+    pub ids: Option<Vec<u32>>,
     /// user assigned order Ids to cancel
     #[serde(default)]
-    pub user_ids: Vec<u8>,
+    pub user_ids: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize)]

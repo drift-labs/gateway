@@ -231,6 +231,14 @@ fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, 
                 }
             )))
         }
+        Err(ControllerError::BadRequest(reason)) => {
+            Either::Left(HttpResponse::BadRequest().json(json!(
+                {
+                    "code": 400,
+                    "reason": reason,
+                }
+            )))
+        }
         Err(ControllerError::UnknownOrderId(id)) => {
             Either::Left(HttpResponse::NotFound().json(json!(
                 {

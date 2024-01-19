@@ -195,16 +195,32 @@ enum AccountEvent {
         price: Decimal,
         order_id: u32,
         ts: u64,
+        signature: String,
     },
     #[serde(rename_all = "camelCase")]
-    OrderCreate { order: OrderWithDecimals, ts: u64 },
+    OrderCreate {
+        order: OrderWithDecimals,
+        ts: u64,
+        signature: String,
+    },
     #[serde(rename_all = "camelCase")]
-    OrderCancel { order_id: u32, ts: u64 },
+    OrderCancel {
+        order_id: u32,
+        ts: u64,
+        signature: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    OrderCancelMissing {
+        user_order_id: u8,
+        order_id: u32,
+        signature: String,
+    },
     #[serde(rename_all = "camelCase")]
     OrderExpire {
         order_id: u32,
         fee: Decimal,
         ts: u64,
+        signature: String,
     },
 }
 
@@ -217,6 +233,7 @@ impl AccountEvent {
         order_id: u32,
         ts: u64,
         decimals: u32,
+        signature: &String,
     ) -> Self {
         let base_amount = Decimal::new(base_amount as i64, decimals);
         let price = Decimal::new(quote_amount as i64, PRICE_DECIMALS) / base_amount;
@@ -231,6 +248,7 @@ impl AccountEvent {
             order_id,
             amount: base_amount.normalize(),
             ts,
+            signature: signature.to_string(),
         }
     }
 }
@@ -371,6 +389,7 @@ fn map_drift_event(
             oracle_price: _,
             market_index,
             market_type,
+            signature,
             ts,
         } => {
             let decimals =
@@ -384,6 +403,7 @@ fn map_drift_event(
                     *maker_order_id,
                     *ts,
                     decimals,
+                    signature,
                 )
             } else {
                 AccountEvent::fill(
@@ -394,6 +414,7 @@ fn map_drift_event(
                     *taker_order_id,
                     *ts,
                     decimals,
+                    signature,
                 )
             };
 
@@ -404,6 +425,7 @@ fn map_drift_event(
             maker,
             taker_order_id,
             maker_order_id,
+            signature,
             ts,
         } => {
             let order_id = if *maker == Some(sub_account_address) {
@@ -416,18 +438,41 @@ fn map_drift_event(
                 AccountEvent::OrderCancel {
                     order_id: *order_id,
                     ts: *ts,
+                    signature: signature.to_string(),
                 },
             )
         }
-        DriftEvent::OrderExpire { order_id, fee, ts } => (
+        DriftEvent::OrderCancelMissing {
+            order_id,
+            user_order_id,
+            signature,
+        } => (
+            Channel::Orders,
+            AccountEvent::OrderCancelMissing {
+                user_order_id: *user_order_id,
+                order_id: *order_id,
+                signature: signature.to_string(),
+            },
+        ),
+        DriftEvent::OrderExpire {
+            order_id,
+            fee,
+            ts,
+            signature,
+        } => (
             Channel::Orders,
             AccountEvent::OrderExpire {
                 order_id: *order_id,
                 fee: Decimal::new((*fee as i64).neg(), PRICE_DECIMALS),
                 ts: *ts,
+                signature: signature.to_string(),
             },
         ),
-        DriftEvent::OrderCreate { order, ts } => {
+        DriftEvent::OrderCreate {
+            order,
+            ts,
+            signature,
+        } => {
             let decimals = get_market_decimals(
                 program_data,
                 Market::new(order.market_index, order.market_type),
@@ -437,6 +482,7 @@ fn map_drift_event(
                 AccountEvent::OrderCreate {
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
+                    signature: signature.to_string(),
                 },
             )
         }
