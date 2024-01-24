@@ -166,7 +166,7 @@ async fn main() -> std::io::Result<()> {
     let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
     websocket::start_ws_server(
         format!("{}:1337", &config.host).as_str(),
-        drift_sdk::utils::http_to_ws(config.rpc_host.as_str()).expect("ws endpoint"),
+        config.rpc_host.replace("http", "ws"),
         state.wallet.clone(),
         client.program_data(),
     )
