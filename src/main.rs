@@ -4,7 +4,7 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{error, info};
+use log::{error, info, warn};
 
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::Pubkey;
@@ -165,6 +165,9 @@ async fn main() -> std::io::Result<()> {
             state.authority(),
             state.default_sub_account()
         );
+        if emulate.is_some() {
+            warn!("using emulation mode, tx signing unavailable");
+        }
     }
 
     let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));

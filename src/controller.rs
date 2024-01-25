@@ -376,17 +376,17 @@ pub fn create_wallet(
     emulate: Option<Pubkey>,
     delegate: Option<Pubkey>,
 ) -> Wallet {
-    match (secret_key, delegate, emulate) {
+    match (&secret_key, emulate, delegate) {
         (Some(secret_key), _, delegate) => {
-            let mut wallet = Wallet::try_from_str(secret_key.as_str()).expect("valid key");
+            let mut wallet = Wallet::try_from_str(secret_key).expect("valid key");
             if let Some(authority) = delegate {
                 wallet.to_delegated(authority);
             }
-            return wallet;
+            wallet
         }
-        (None, Some(emulate), None) => return Wallet::read_only(emulate),
+        (None, Some(emulate), None) => Wallet::read_only(emulate),
         _ => {
-            panic!("expected 'DRIFT_SECRET_KEY' or --emulate <pubkey>");
+            panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
     }
 }
