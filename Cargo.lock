@@ -1353,8 +1353,8 @@ dependencies = [
 
 [[package]]
 name = "drift"
-version = "2.48.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#3f759540f9ac1312c14e2684f80c3ee8e9220b55"
+version = "2.56.0"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#88179e28d0223da91da100b5f24013ebf7482109"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1362,16 +1362,17 @@ dependencies = [
  "base64 0.13.1",
  "borsh 0.9.3",
  "bytemuck",
+ "drift-macros",
  "enumflags2",
  "num-derive",
  "num-integer",
  "num-traits",
  "phoenix-v1",
  "pyth-client",
- "serde",
  "serum_dex",
  "solana-program",
  "solana-security-txt",
+ "static_assertions",
  "thiserror",
  "uint",
 ]
@@ -1395,9 +1396,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "drift-macros"
+version = "0.1.0"
+source = "git+https://github.com/drift-labs/drift-macros.git?rev=c57d87#c57d87e073d13d43f4d1fb09fe6822915a4ccc11"
+dependencies = [
+ "quote 1.0.35",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#3f759540f9ac1312c14e2684f80c3ee8e9220b55"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#88179e28d0223da91da100b5f24013ebf7482109"
 dependencies = [
  "anchor-lang",
  "base64 0.13.1",

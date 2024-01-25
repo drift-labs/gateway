@@ -49,21 +49,13 @@ impl AppState {
     pub fn default_sub_account(&self) -> Pubkey {
         self.wallet.default_sub_account()
     }
-    pub async fn new(
-        secret_key: &str,
-        endpoint: &str,
-        devnet: bool,
-        delegate: Option<Pubkey>,
-    ) -> Self {
+    pub async fn new(endpoint: &str, devnet: bool, wallet: Wallet) -> Self {
         let context = if devnet {
             Context::DevNet
         } else {
             Context::MainNet
         };
-        let mut wallet = Wallet::try_from_str(secret_key).expect("valid key");
-        if let Some(authority) = delegate {
-            wallet.to_delegated(authority);
-        }
+
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
         let client = DriftClient::new(context, endpoint, account_provider)
             .await
@@ -316,7 +308,7 @@ impl AppState {
             Cow::Borrowed(account_data),
         )
         .payer(self.wallet.signer())
-        .modify_orders(params)
+        .modify_orders(params.as_slice())
         .build();
 
         self.client
@@ -371,5 +363,30 @@ fn build_cancel_ix(
         }
     } else {
         Ok(builder.cancel_all_orders())
+    }
+}
+
+/// Initialize a wallet for controller, possible valid configs:
+///
+/// 1) keypair
+/// 2) keypair + delegated
+/// 3) emulation/RO mode
+pub fn create_wallet(
+    secret_key: Option<String>,
+    emulate: Option<Pubkey>,
+    delegate: Option<Pubkey>,
+) -> Wallet {
+    match (&secret_key, emulate, delegate) {
+        (Some(secret_key), _, delegate) => {
+            let mut wallet = Wallet::try_from_str(secret_key).expect("valid key");
+            if let Some(authority) = delegate {
+                wallet.to_delegated(authority);
+            }
+            wallet
+        }
+        (None, Some(emulate), None) => Wallet::read_only(emulate),
+        _ => {
+            panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
+        }
     }
 }

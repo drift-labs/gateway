@@ -4,9 +4,9 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{error, info};
+use log::{error, info, warn};
 
-use controller::{AppState, ControllerError};
+use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::Pubkey;
 use serde_json::json;
 use std::{borrow::Borrow, str::FromStr, sync::Arc};
@@ -137,11 +137,15 @@ async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();
-    let secret_key = std::env::var("DRIFT_GATEWAY_KEY").expect("missing DRIFT_GATEWAY_KEY");
+    let secret_key = std::env::var("DRIFT_GATEWAY_KEY");
     let delegate = config
         .delegate
         .map(|ref x| Pubkey::from_str(x).expect("valid pubkey"));
-    let state = AppState::new(secret_key.as_str(), &config.rpc_host, config.dev, delegate).await;
+    let emulate = config
+        .emulate
+        .map(|ref x| Pubkey::from_str(x).expect("valid pubkey"));
+    let wallet = create_wallet(secret_key.ok(), emulate, delegate);
+    let state = AppState::new(&config.rpc_host, config.dev, wallet).await;
 
     info!(
         "🏛️ gateway listening at http://{}:{}",
@@ -161,6 +165,9 @@ async fn main() -> std::io::Result<()> {
             state.authority(),
             state.default_sub_account()
         );
+        if emulate.is_some() {
+            warn!("using emulation mode, tx signing unavailable");
+        }
     }
 
     let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
@@ -206,9 +213,11 @@ struct GatewayConfig {
     #[argh(option, default = "8080")]
     port: u16,
     /// use delegated signing mode, provide the delegator's pubkey
-    /// e.g. `--delegate <DELEGATOR_PUBKEY>`
     #[argh(option)]
     delegate: Option<String>,
+    /// run the gateway in read-only mode for given authority pubkey
+    #[argh(option)]
+    emulate: Option<String>,
 }
 
 fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
@@ -265,6 +274,8 @@ mod tests {
 
     use crate::types::Market;
 
+    use self::controller::create_wallet;
+
     use super::*;
 
     const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";
@@ -276,7 +287,8 @@ mod tests {
     }
 
     async fn setup_controller() -> AppState {
-        AppState::new(&get_seed(), TEST_ENDPOINT, true, None).await
+        let wallet = create_wallet(Some(get_seed()), None, None);
+        AppState::new(TEST_ENDPOINT, true, wallet).await
     }
 
     #[actix_web::test]
