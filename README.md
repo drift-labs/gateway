@@ -16,7 +16,7 @@ export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 drift-gateway --dev https://api.devnet.solana.com
 
 # or mainnet
-# NB: `api.mainnet-beta.solana.com`` cannot be used due to rate limits on certain RPC calls
+# NB: `api.mainnet-beta.solana.com` cannot be used due to rate limits on certain RPC calls
 drift-gateway https://rpc-provider.example.com
 ```
 
@@ -28,7 +28,7 @@ docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https:/
 
 ## Usage
 ```bash
-Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>]
+Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
 
 Drift gateway server
 
@@ -39,8 +39,8 @@ Options:
   --dev             run in devnet mode
   --host            gateway host address
   --port            gateway port
-  --delegate        use delegated signing mode, provide the delegator's pubkey
-                    e.g. `--delegate <DELEGATOR_PUBKEY>`
+  --delegate        use delegated signing mode, provide the delegator pubkey
+  --emulate         run the gateway in read-only mode for given authority pubkey
   --help            display usage information
 ```
 
@@ -448,10 +448,18 @@ this event may be safely ignored, it is added in an effort to help order life-cy
 }
 ```
 
+## Emulation Mode
+Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
+
+The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
+
+note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
+
+
 ## Delegated Signing Mode
 Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
 
-In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY`.
+In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY` (i.e delegate key).
 
 Use the drift UI or Ts/Python SDK to assign a delegator key.
 see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
