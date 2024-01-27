@@ -251,7 +251,7 @@ $ curl localhost:8080/v2/orders -X POST \
 Returns solana tx signature on success
 
 ### Modify Orders
-like place orders but caller must specify either `orderId` or `userOrderId` to indicate which order(s) to modify.
+like place orders but caller must use either `orderId` or `userOrderId` to indicate which order(s) to modify.
 
 - `amount` can be modified to flip the order from long/short to bid/ask
 - the order market cannot be modified.
@@ -260,14 +260,18 @@ $ curl localhost:8080/v2/orders -X PATCH \
 -H 'content-type: application/json' \
 -d '{
     "orders": [{
+        "marketIndex": 0,
+        "marketType": "perp",
         "amount": -1.1,
         "price": 80.5,
         "userOrderId": 101
     },
     {
-        "amount": 1.05,
+        "marketIndex": 1,
+        "marketType": "spot",
+        "amount": 2.05,
         "price": 61.0,
-        "orderId": 32
+        "userOrderId": 32
     }]
 }'
 ```
@@ -286,10 +290,10 @@ $ curl localhost:8080/v2/orders -X DELETE
 ```
 Returns solana tx signature on success
 
-### Cancel and Place Orders
+### Atomic Cancel/Modify/Place Orders
 
-Atomically cancel then place orders without possible downtime.
-Request format is an embedded cancel and place request
+Atomically cancel, modify, and place orders without possible downtime.
+Request format is an embedded cancel modify, and place request
 
 ```bash
 $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: application/json' \
@@ -298,13 +302,22 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
         "marketIndex": 0,
         "marketType": "perp"
     },
+    "modify": {
+      "orders": [{
+            "marketIndex": 0,
+            "marketType": "perp",
+            "orderId": 555,
+            "amount": -0.5,
+            "price": 82.0
+      }]
+    },
     "place": {
         "orders": [
         {
             "marketIndex": 0,
             "marketType": "perp",
             "amount": -1.23,
-            "price": 80.0,
+            "price": 99.0,
             "postOnly": true,
             "orderType": "limit",
             "immediateOrCancel": false,
