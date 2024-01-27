@@ -248,14 +248,6 @@ fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, 
                 }
             )))
         }
-        Err(ControllerError::UnknownOrderId(id)) => {
-            Either::Left(HttpResponse::NotFound().json(json!(
-                {
-                    "code": 404,
-                    "reason": format!("order: {id}"),
-                }
-            )))
-        }
     }
 }
 

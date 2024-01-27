@@ -156,6 +156,8 @@ pub struct ModifyOrdersRequest {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ModifyOrder {
+    #[serde(flatten)]
+    pub market: Market,
     amount: Option<Decimal>,
     price: Option<Decimal>,
     pub user_order_id: Option<u8>,
@@ -453,6 +455,7 @@ impl TxResponse {
 #[derive(Serialize, Deserialize)]
 pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
+    pub modify: ModifyOrdersRequest,
     pub place: PlaceOrdersRequest,
 }
 

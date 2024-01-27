@@ -1,6 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use drift_sdk::{
+    constants::ProgramData,
     dlob::DLOBClient,
     types::{Context, MarketType, ModifyOrderParams, SdkError, SdkResult},
     DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
@@ -22,8 +23,6 @@ pub type GatewayResult<T> = Result<T, ControllerError>;
 pub enum ControllerError {
     #[error("internal error: {0}")]
     Sdk(#[from] SdkError),
-    #[error("order id not found: {0}")]
-    UnknownOrderId(u32),
     #[error("{0}")]
     BadRequest(String),
     #[error("tx failed ({code}): {reason}")]
@@ -215,7 +214,8 @@ impl AppState {
         )
         .payer(self.wallet.signer());
 
-        let tx = build_cancel_ix(builder, req.cancel)?
+        let builder = build_cancel_ix(builder, req.cancel)?;
+        let tx = build_modify_ix(builder, req.modify, self.client.program_data())?
             .place_orders(orders)
             .build();
 
@@ -265,51 +265,14 @@ impl AppState {
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.wallet.sub_account(sub_account_id);
         let account_data = &self.client.get_user_account(&sub_account).await?;
-        // NB: its possible to let the drift program sort the modifications by userOrderId
-        // sorting it client side for simplicity
-        let mut params = Vec::<(u32, ModifyOrderParams)>::with_capacity(req.orders.len());
-        for order in req.orders {
-            if let Some(order_id) = order.order_id {
-                if let Some(onchain_order) =
-                    account_data.orders.iter().find(|x| x.order_id == order_id)
-                {
-                    let base_decimals = get_market_decimals(
-                        self.client.program_data(),
-                        Market::new(onchain_order.market_index, onchain_order.market_type),
-                    );
-                    params.push((order_id, order.to_order_params(base_decimals)));
-                    continue;
-                }
-            } else if let Some(user_order_id) = order.user_order_id {
-                if let Some(onchain_order) = account_data
-                    .orders
-                    .iter()
-                    .find(|x| x.user_order_id == user_order_id)
-                {
-                    let base_decimals = get_market_decimals(
-                        self.client.program_data(),
-                        Market::new(onchain_order.market_index, onchain_order.market_type),
-                    );
-                    params.push((onchain_order.order_id, order.to_order_params(base_decimals)));
-                    continue;
-                }
-            }
 
-            return Err(ControllerError::UnknownOrderId(
-                order
-                    .order_id
-                    .unwrap_or(order.user_order_id.unwrap_or(0) as u32),
-            ));
-        }
-
-        let tx = TransactionBuilder::new(
+        let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
             Cow::Borrowed(account_data),
         )
-        .payer(self.wallet.signer())
-        .modify_orders(params.as_slice())
-        .build();
+        .payer(self.wallet.signer());
+        let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
 
         self.client
             .sign_and_send(&self.wallet, tx)
@@ -363,6 +326,43 @@ fn build_cancel_ix(
         }
     } else {
         Ok(builder.cancel_all_orders())
+    }
+}
+
+fn build_modify_ix<'a>(
+    builder: TransactionBuilder<'a>,
+    req: ModifyOrdersRequest,
+    program_data: &ProgramData,
+) -> GatewayResult<TransactionBuilder<'a>> {
+    if req.orders.is_empty() {
+        return Ok(builder);
+    }
+
+    let by_user_order_ids = req.orders[0].user_order_id.is_some_and(|x| x > 0);
+    if by_user_order_ids {
+        let mut params = Vec::<(u8, ModifyOrderParams)>::with_capacity(req.orders.len());
+        for order in req.orders {
+            let base_decimals = get_market_decimals(program_data, order.market);
+            params.push((
+                order.user_order_id.ok_or(ControllerError::BadRequest(
+                    "userOrderId not set".to_string(),
+                ))?,
+                order.to_order_params(base_decimals),
+            ));
+        }
+        Ok(builder.modify_orders_by_user_id(params.as_slice()))
+    } else {
+        let mut params = Vec::<(u32, ModifyOrderParams)>::with_capacity(req.orders.len());
+        for order in req.orders {
+            let base_decimals = get_market_decimals(program_data, order.market);
+            params.push((
+                order
+                    .order_id
+                    .ok_or(ControllerError::BadRequest("orderId not set".to_string()))?,
+                order.to_order_params(base_decimals),
+            ));
+        }
+        Ok(builder.modify_orders(params.as_slice()))
     }
 }
 
