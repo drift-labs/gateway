@@ -5,7 +5,7 @@ use std::ops::Neg;
 use drift_sdk::{
     async_utils::retry_policy::{self},
     constants::ProgramData,
-    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient},
+    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient, RpcClient},
     types::{MarketType, Order, OrderType, PositionDirection},
     Pubkey, Wallet,
 };
@@ -92,6 +92,7 @@ async fn accept_connection(
                                 PubsubClient::new(ws_endpoint.as_str())
                                     .await
                                     .expect("ws connect"),
+                                    RpcClient::new(ws_endpoint.replace("ws", "http")),
                                 sub_account_address,
                                 retry_policy::exponential_backoff(3),
                             );
