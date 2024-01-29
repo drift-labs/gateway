@@ -92,7 +92,7 @@ async fn accept_connection(
                                 PubsubClient::new(ws_endpoint.as_str())
                                     .await
                                     .expect("ws connect"),
-                                    RpcClient::new(ws_endpoint.replace("ws", "http")),
+                                RpcClient::new(ws_endpoint.replace("ws", "http")),
                                 sub_account_address,
                                 retry_policy::exponential_backoff(3),
                             );
