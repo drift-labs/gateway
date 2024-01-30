@@ -460,6 +460,7 @@ fn map_drift_event(
             fee,
             ts,
             signature,
+            ..
         } => (
             Channel::Orders,
             AccountEvent::OrderExpire {
@@ -473,6 +474,7 @@ fn map_drift_event(
             order,
             ts,
             signature,
+            ..
         } => {
             let decimals = get_market_decimals(
                 program_data,

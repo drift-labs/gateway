@@ -56,7 +56,7 @@ impl AppState {
         };
 
         let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
-        let client = DriftClient::new(context, endpoint, account_provider)
+        let client = DriftClient::new(context, account_provider)
             .await
             .expect("ok");
 
