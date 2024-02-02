@@ -4,10 +4,10 @@ use drift_sdk::{
     constants::ProgramData,
     dlob::DLOBClient,
     types::{Context, MarketType, ModifyOrderParams, SdkError, SdkResult},
-    DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
+    AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::error;
+use log::{error, warn};
 use thiserror::Error;
 
 use crate::types::{
@@ -86,12 +86,16 @@ impl AppState {
         sub_account_id: u16,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.wallet.sub_account(sub_account_id);
-        let account_data = self.client.get_user_account(&sub_account).await?;
+        let (account_data, pf) = tokio::join!(
+            self.client.get_user_account(&sub_account),
+            get_priority_fee(&self.client)
+        );
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Borrowed(&account_data),
+            Cow::Owned(account_data?),
         )
+        .priority_fee(pf)
         .payer(self.wallet.signer());
 
         let tx = build_cancel_ix(builder, req)?.build();
@@ -206,12 +210,17 @@ impl AppState {
             .collect();
 
         let sub_account = self.wallet.sub_account(sub_account_id);
-        let account_data = self.client.get_user_account(&sub_account).await?;
+        let (account_data, pf) = tokio::join!(
+            self.client.get_user_account(&sub_account),
+            get_priority_fee(&self.client)
+        );
+
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             self.wallet.sub_account(0),
-            Cow::Borrowed(&account_data),
+            Cow::Owned(account_data?),
         )
+        .priority_fee(pf)
         .payer(self.wallet.signer());
 
         let builder = build_cancel_ix(builder, req.cancel)?;
@@ -232,7 +241,10 @@ impl AppState {
         sub_account_id: u16,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.wallet.sub_account(sub_account_id);
-        let account_data = self.client.get_user_account(&sub_account).await?;
+        let (account_data, pf) = tokio::join!(
+            self.client.get_user_account(&sub_account),
+            get_priority_fee(&self.client)
+        );
 
         let orders = req
             .orders
@@ -245,8 +257,9 @@ impl AppState {
         let tx = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Borrowed(&account_data),
+            Cow::Borrowed(&account_data?),
         )
+        .priority_fee(pf)
         .payer(self.wallet.signer())
         .place_orders(orders)
         .build();
@@ -264,13 +277,17 @@ impl AppState {
         sub_account_id: u16,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.wallet.sub_account(sub_account_id);
-        let account_data = &self.client.get_user_account(&sub_account).await?;
+        let (account_data, pf) = tokio::join!(
+            self.client.get_user_account(&sub_account),
+            get_priority_fee(&self.client)
+        );
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Borrowed(account_data),
+            Cow::Owned(account_data?),
         )
+        .priority_fee(pf)
         .payer(self.wallet.signer());
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
 
@@ -389,4 +406,23 @@ pub fn create_wallet(
             panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
     }
+}
+
+/// get average priority fee from chain, no accounts writable (user's subaccount is negligible)
+async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
+    let mut priority_fee = 1_u64;
+    if let Ok(recent_fees) = client.get_recent_priority_fees(&[], Some(16)).await {
+        // includes possibly 0 values
+        if let Some(avg_priority_fee) = recent_fees
+            .iter()
+            .sum::<u64>()
+            .checked_div(recent_fees.len() as u64)
+        {
+            priority_fee = avg_priority_fee;
+        }
+    } else {
+        warn!(target: "controller", "failed to fetch live priority fee");
+    }
+
+    priority_fee
 }
