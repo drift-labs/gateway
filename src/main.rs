@@ -1,5 +1,7 @@
 use actix_web::{
-    delete, get, patch, post,
+    delete, get,
+    middleware::Logger,
+    patch, post,
     web::{self, Json},
     App, Either, HttpResponse, HttpServer, Responder,
 };
@@ -180,17 +182,20 @@ async fn main() -> std::io::Result<()> {
     .await;
 
     HttpServer::new(move || {
-        App::new().app_data(web::Data::new(state.clone())).service(
-            web::scope("/v2")
-                .service(get_markets)
-                .service(get_positions)
-                .service(get_orders)
-                .service(create_orders)
-                .service(cancel_orders)
-                .service(modify_orders)
-                .service(get_orderbook)
-                .service(cancel_and_place_orders),
-        )
+        App::new()
+            .wrap(Logger::default())
+            .app_data(web::Data::new(state.clone()))
+            .service(
+                web::scope("/v2")
+                    .service(get_markets)
+                    .service(get_positions)
+                    .service(get_orders)
+                    .service(create_orders)
+                    .service(cancel_orders)
+                    .service(modify_orders)
+                    .service(get_orderbook)
+                    .service(cancel_and_place_orders),
+            )
     })
     .bind((config.host, config.port))?
     .run()
