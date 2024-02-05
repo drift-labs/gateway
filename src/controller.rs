@@ -3,7 +3,10 @@ use std::{borrow::Cow, sync::Arc};
 use drift_sdk::{
     constants::ProgramData,
     dlob::DLOBClient,
-    types::{Context, MarketType, ModifyOrderParams, SdkError, SdkResult},
+    types::{
+        Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
+        SdkResult, VersionedMessage,
+    },
     AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
@@ -99,12 +102,7 @@ impl AppState {
         .payer(self.wallet.signer());
 
         let tx = build_cancel_ix(builder, req)?.build();
-
-        self.client
-            .sign_and_send(&self.wallet, tx)
-            .await
-            .map(|s| TxResponse::new(s.to_string()))
-            .map_err(handle_tx_err)
+        self.send_tx(tx).await
     }
 
     /// Return orders by position if given, otherwise return all positions
@@ -228,11 +226,7 @@ impl AppState {
             .place_orders(orders)
             .build();
 
-        self.client
-            .sign_and_send(&self.wallet, tx)
-            .await
-            .map(|s| TxResponse::new(s.to_string()))
-            .map_err(handle_tx_err)
+        self.send_tx(tx).await
     }
 
     pub async fn place_orders(
@@ -264,11 +258,7 @@ impl AppState {
         .place_orders(orders)
         .build();
 
-        self.client
-            .sign_and_send(&self.wallet, tx)
-            .await
-            .map(|s| TxResponse::new(s.to_string()))
-            .map_err(handle_tx_err)
+        self.send_tx(tx).await
     }
 
     pub async fn modify_orders(
@@ -290,18 +280,31 @@ impl AppState {
         .priority_fee(pf)
         .payer(self.wallet.signer());
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
-
-        self.client
-            .sign_and_send(&self.wallet, tx)
-            .await
-            .map(|s| TxResponse::new(s.to_string()))
-            .map_err(handle_tx_err)
+        self.send_tx(tx).await
     }
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
         let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
         let decimals = get_market_decimals(self.client.program_data(), req.market);
         Ok(OrderbookL2::new(book, decimals))
+    }
+
+    async fn send_tx(&self, tx: VersionedMessage) -> GatewayResult<TxResponse> {
+        self.client
+            .sign_and_send_with_config(
+                &self.wallet,
+                tx,
+                RpcSendTransactionConfig {
+                    max_retries: Some(0),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map(|s| TxResponse::new(s.to_string()))
+            .map_err(|err| {
+                warn!(target: "tx", "sending tx failed: {err:?}");
+                handle_tx_err(err)
+            })
     }
 }
 
@@ -408,21 +411,37 @@ pub fn create_wallet(
     }
 }
 
-/// get average priority fee from chain, no accounts writable (user's subaccount is negligible)
+/// get priority fee estimated from chain
 async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
-    let mut priority_fee = 1_u64;
-    if let Ok(recent_fees) = client.get_recent_priority_fees(&[], Some(16)).await {
-        // includes possibly 0 values
-        if let Some(avg_priority_fee) = recent_fees
-            .iter()
-            .sum::<u64>()
-            .checked_div(recent_fees.len() as u64)
-        {
-            priority_fee = avg_priority_fee;
-        }
+    let mut priority_fee = 1_000_u64;
+    // use sol-perp market as proxy for local-ish drift fee market
+    if let Ok(mut recent_fees) = client
+        .get_recent_priority_fees(&[MarketId::perp(0)], Some(100))
+        .await
+    {
+        recent_fees.sort_unstable();
+        let idx = (recent_fees.len() * 3) / 4; // 75-th percentile
+        priority_fee = recent_fees[idx];
     } else {
         warn!(target: "controller", "failed to fetch live priority fee");
     }
 
     priority_fee
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_pf() {
+        let account_provider = WsAccountProvider::new("https://api.devnet.solana.com")
+            .await
+            .expect("ws connects");
+        let client = DriftClient::new(Context::DevNet, account_provider)
+            .await
+            .expect("ok");
+
+        assert!(get_priority_fee(&client).await > 0);
+    }
 }

@@ -229,7 +229,6 @@ fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, 
     match result {
         Ok(payload) => Either::Right(Json(payload)),
         Err(ControllerError::Sdk(err)) => {
-            error!("{err:?}");
             Either::Left(HttpResponse::InternalServerError().json(json!(
                 {
                     "code": 500,

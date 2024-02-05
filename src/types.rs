@@ -179,6 +179,7 @@ pub struct ModifyOrder {
     pub order_id: Option<u32>,
     reduce_only: Option<bool>,
     oracle_price_offset: Option<Decimal>,
+    max_ts: Option<i64>,
 }
 
 impl ModifyOrder {
@@ -213,6 +214,7 @@ impl ModifyOrder {
             price,
             reduce_only: self.reduce_only,
             oracle_price_offset,
+            max_ts: self.max_ts,
             ..Default::default()
         }
     }
@@ -249,6 +251,7 @@ pub struct PlaceOrder {
     immediate_or_cancel: bool,
     #[serde(default)]
     oracle_price_offset: Option<Decimal>,
+    max_ts: Option<i64>,
 }
 
 fn market_type_ser<S>(market_type: &sdk_types::MarketType, serializer: S) -> Result<S::Ok, S::Error>
@@ -318,6 +321,7 @@ impl PlaceOrder {
             oracle_price_offset: self
                 .oracle_price_offset
                 .map(|x| scale_decimal_to_i64(x, PRICE_PRECISION as u32) as i32),
+            max_ts: self.max_ts,
             ..Default::default()
         }
     }
