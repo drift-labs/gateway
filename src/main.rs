@@ -6,7 +6,7 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{error, info, warn};
+use log::{info, warn};
 
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::Pubkey;
@@ -183,7 +183,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::default())
+            .wrap(Logger::new("%a | %s | %r | (%Dms)").log_target("gateway"))
             .app_data(web::Data::new(state.clone()))
             .service(
                 web::scope("/v2")
@@ -229,7 +229,6 @@ fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, 
     match result {
         Ok(payload) => Either::Right(Json(payload)),
         Err(ControllerError::Sdk(err)) => {
-            error!("{err:?}");
             Either::Left(HttpResponse::InternalServerError().json(json!(
                 {
                     "code": 500,

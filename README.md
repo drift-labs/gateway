@@ -221,6 +221,7 @@ localhost:8080/v2/positions
 - `orderType` only "limit" and "market" options are fully supported by the gateway
 - `oraclePriceOffset` supported on `"limit"` order types.
 It creates a limit order with a floating price relative to the market oracle price. when supplied the `price` field is ignored.
+- `maxTs` order expiration timestamp. NB: expired orders can incur protocol costs
 ```bash
 $ curl localhost:8080/v2/orders -X POST \
 -H 'content-type: application/json' \
@@ -235,7 +236,8 @@ $ curl localhost:8080/v2/orders -X POST \
         "orderType": "limit",
         "userOrderId": 101,
         "immediateOrCancel": false,
-        "reduceOnly": false
+        "reduceOnly": false,
+        "maxTs": 1707112301
     },
     {
         "marketIndex": 0,
