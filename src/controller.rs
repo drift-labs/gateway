@@ -102,7 +102,7 @@ impl AppState {
         .payer(self.wallet.signer());
 
         let tx = build_cancel_ix(builder, req)?.build();
-        self.send_tx(tx).await
+        self.send_tx(tx, "cancel_orders").await
     }
 
     /// Return orders by position if given, otherwise return all positions
@@ -226,7 +226,7 @@ impl AppState {
             .place_orders(orders)
             .build();
 
-        self.send_tx(tx).await
+        self.send_tx(tx, "cancel_and_place").await
     }
 
     pub async fn place_orders(
@@ -258,7 +258,7 @@ impl AppState {
         .place_orders(orders)
         .build();
 
-        self.send_tx(tx).await
+        self.send_tx(tx, "place_orders").await
     }
 
     pub async fn modify_orders(
@@ -280,7 +280,7 @@ impl AppState {
         .priority_fee(pf)
         .payer(self.wallet.signer());
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
-        self.send_tx(tx).await
+        self.send_tx(tx, "modify_orders").await
     }
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
@@ -289,7 +289,11 @@ impl AppState {
         Ok(OrderbookL2::new(book, decimals))
     }
 
-    async fn send_tx(&self, tx: VersionedMessage) -> GatewayResult<TxResponse> {
+    async fn send_tx(
+        &self,
+        tx: VersionedMessage,
+        reason: &'static str,
+    ) -> GatewayResult<TxResponse> {
         self.client
             .sign_and_send_with_config(
                 &self.wallet,
@@ -302,7 +306,7 @@ impl AppState {
             .await
             .map(|s| TxResponse::new(s.to_string()))
             .map_err(|err| {
-                warn!(target: "tx", "sending tx failed: {err:?}");
+                warn!(target: "tx", "sending {reason} tx failed: {err:?}");
                 handle_tx_err(err)
             })
     }
@@ -433,8 +437,10 @@ async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
 mod tests {
     use super::*;
 
+    #[ignore]
     #[tokio::test]
     async fn test_pf() {
+        // flakey needs a mainnet RPC getProgramAccounts
         let account_provider = WsAccountProvider::new("https://api.devnet.solana.com")
             .await
             .expect("ws connects");
