@@ -1354,7 +1354,7 @@ dependencies = [
 [[package]]
 name = "drift"
 version = "2.56.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#b09ba7fcad6a097e4ccd9b001289185bfdaef243"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#67b684fdc10e244119b072318cc94c0ac85438e5"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1407,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#b09ba7fcad6a097e4ccd9b001289185bfdaef243"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#67b684fdc10e244119b072318cc94c0ac85438e5"
 dependencies = [
  "anchor-lang",
  "base64 0.13.1",
@@ -1896,9 +1896,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d3d0e0f38255e7fa3cf31335b3a56f05febd18025f4db5ef7a0cfb4f8da651f"
+checksum = "d0c62115964e08cb8039170eb33c1d0e2388a256930279edca206fff675f82c3"
 
 [[package]]
 name = "hex"
@@ -2146,7 +2146,7 @@ version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bad00257d07be169d870ab665980b06cdb366d792ad690bf2e76876dc503455"
 dependencies = [
- "hermit-abi 0.3.4",
+ "hermit-abi 0.3.5",
  "rustix",
  "windows-sys 0.52.0",
 ]
@@ -2590,7 +2590,7 @@ version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
 dependencies = [
- "hermit-abi 0.3.4",
+ "hermit-abi 0.3.5",
  "libc",
 ]
 
@@ -4594,13 +4594,12 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.9.0"
+version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01ce4141aa927a6d1bd34a041795abd0db1cccba5d5f24b009f694bdf3a1f3fa"
+checksum = "a365e8cd18e44762ef95d87f284f4b5cd04107fec2ff3052bd6a3e6069669e67"
 dependencies = [
  "cfg-if",
  "fastrand",
- "redox_syscall",
  "rustix",
  "windows-sys 0.52.0",
 ]

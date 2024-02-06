@@ -3,6 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     dlob::DLOBClient,
+    event_subscriber::CommitmentConfig,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
@@ -41,6 +42,8 @@ pub struct AppState {
     pub wallet: Wallet,
     pub client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
+    /// Solana tx commitment level for preflight confirmation
+    tx_commitment: CommitmentConfig,
 }
 
 impl AppState {
@@ -55,14 +58,23 @@ impl AppState {
     pub fn default_sub_account(&self) -> Pubkey {
         self.wallet.default_sub_account()
     }
-    pub async fn new(endpoint: &str, devnet: bool, wallet: Wallet) -> Self {
+    pub async fn new(
+        endpoint: &str,
+        devnet: bool,
+        wallet: Wallet,
+        commitment: Option<(CommitmentConfig, CommitmentConfig)>,
+    ) -> Self {
+        let (state_commitment, tx_commitment) =
+            commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
         let context = if devnet {
             Context::DevNet
         } else {
             Context::MainNet
         };
 
-        let account_provider = WsAccountProvider::new(endpoint).await.expect("ws connects");
+        let account_provider = WsAccountProvider::new_with_commitment(endpoint, state_commitment)
+            .await
+            .expect("ws connects");
         let client = DriftClient::new(context, account_provider)
             .await
             .expect("ok");
@@ -77,6 +89,7 @@ impl AppState {
             wallet,
             client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
+            tx_commitment,
         }
     }
 
@@ -317,6 +330,7 @@ impl AppState {
                 tx,
                 RpcSendTransactionConfig {
                     max_retries: Some(0),
+                    preflight_commitment: Some(self.tx_commitment.commitment),
                     ..Default::default()
                 },
             )

@@ -10,7 +10,7 @@ use drift_sdk::{
     Pubkey, Wallet,
 };
 use futures_util::{SinkExt, StreamExt};
-use log::{debug, info};
+use log::info;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
@@ -20,7 +20,10 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use crate::types::{get_market_decimals, Market, PRICE_DECIMALS};
+use crate::{
+    types::{get_market_decimals, Market, PRICE_DECIMALS},
+    LOG_TARGET,
+};
 
 /// Start the websocket server
 pub async fn start_ws_server(
@@ -84,7 +87,7 @@ async fn accept_connection(
                                 // no double subs
                                 return;
                             }
-                            debug!("subscribing to events for: {}", request.sub_account_id);
+                            info!(target: LOG_TARGET, "subscribing to events for: {}", request.sub_account_id);
 
                             let sub_account_address =
                                 wallet.sub_account(request.sub_account_id as u16);
@@ -125,7 +128,7 @@ async fn accept_connection(
                             stream_handle = Some(join_handle);
                         }
                         Method::Unsubscribe => {
-                            debug!("unsubscribing: {}", request.sub_account_id);
+                            info!(target: LOG_TARGET, "unsubscribing: {}", request.sub_account_id);
                             // TODO: support ending by channel, this ends all channels
                             if let Some(task) = stream_handle.take() {
                                 task.abort();

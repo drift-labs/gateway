@@ -9,7 +9,7 @@ use argh::FromArgs;
 use log::{debug, info, warn};
 
 use controller::{create_wallet, AppState, ControllerError};
-use drift_sdk::Pubkey;
+use drift_sdk::{types::CommitmentConfig, Pubkey};
 use serde_json::json;
 use std::{borrow::Borrow, str::FromStr, sync::Arc};
 use types::{
@@ -153,7 +153,14 @@ async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
-    env_logger::Builder::from_default_env().init();
+    let log_level = if config.verbose {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+    env_logger::Builder::from_default_env()
+        .filter_module(LOG_TARGET, log_level)
+        .init();
     let secret_key = std::env::var("DRIFT_GATEWAY_KEY");
     let delegate = config
         .delegate
@@ -162,15 +169,28 @@ async fn main() -> std::io::Result<()> {
         .emulate
         .map(|ref x| Pubkey::from_str(x).expect("valid pubkey"));
     let wallet = create_wallet(secret_key.ok(), emulate, delegate);
-    let state = AppState::new(&config.rpc_host, config.dev, wallet).await;
+    let state_commitment = CommitmentConfig::from_str(&config.commitment)
+        .expect("one of: processed | confirmed | finalized");
+    let tx_commitment = CommitmentConfig::from_str(&config.tx_commitment)
+        .expect("one of: processed | confirmed | finalized");
+
+    let state = AppState::new(
+        &config.rpc_host,
+        config.dev,
+        wallet,
+        Some((state_commitment, tx_commitment)),
+    )
+    .await;
 
     info!(
+        target: LOG_TARGET,
         "🏛️ gateway listening at http://{}:{}",
         config.host, config.port
     );
 
     if delegate.is_some() {
         info!(
+            target: LOG_TARGET,
             "🪪: authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
             state.authority(),
             state.default_sub_account(),
@@ -178,6 +198,7 @@ async fn main() -> std::io::Result<()> {
         );
     } else {
         info!(
+            target: LOG_TARGET,
             "🪪: authority: {:?}, default sub-account: {:?}",
             state.authority(),
             state.default_sub_account()
@@ -189,7 +210,7 @@ async fn main() -> std::io::Result<()> {
 
     let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
     websocket::start_ws_server(
-        format!("{}:1337", &config.host).as_str(),
+        format!("{}:{}", &config.host, config.ws_port).as_str(),
         config.rpc_host.replace("http", "ws"),
         state.wallet.clone(),
         client.program_data(),
@@ -198,7 +219,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::new("%a | %s | %r | (%Dms)").log_target("gateway"))
+            .wrap(Logger::new("%a | %s | %r | (%Dms)").log_target(LOG_TARGET))
             .app_data(web::Data::new(state.clone()))
             .service(
                 web::scope("/v2")
@@ -216,29 +237,6 @@ async fn main() -> std::io::Result<()> {
     .bind((config.host, config.port))?
     .run()
     .await
-}
-
-#[derive(FromArgs)]
-/// Drift gateway server
-struct GatewayConfig {
-    /// the solana RPC URL
-    #[argh(positional)]
-    rpc_host: String,
-    /// run in devnet mode
-    #[argh(switch)]
-    dev: bool,
-    /// gateway host address
-    #[argh(option, default = "String::from(\"127.0.0.1\")")]
-    host: String,
-    /// gateway port
-    #[argh(option, default = "8080")]
-    port: u16,
-    /// use delegated signing mode, provide the delegator's pubkey
-    #[argh(option)]
-    delegate: Option<String>,
-    /// run the gateway in read-only mode for given authority pubkey
-    #[argh(option)]
-    emulate: Option<String>,
 }
 
 fn handle_result<T: std::fmt::Debug>(
@@ -283,6 +281,41 @@ fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>
     )))
 }
 
+#[derive(FromArgs)]
+/// Drift gateway server
+struct GatewayConfig {
+    /// the solana RPC URL
+    #[argh(positional)]
+    rpc_host: String,
+    /// run in devnet mode
+    #[argh(switch)]
+    dev: bool,
+    /// gateway host address
+    #[argh(option, default = "String::from(\"127.0.0.1\")")]
+    host: String,
+    /// gateway port
+    #[argh(option, default = "8080")]
+    port: u16,
+    /// gateway Ws port
+    #[argh(option, default = "1337")]
+    ws_port: u16,
+    /// use delegated signing mode, provide the delegator's pubkey
+    #[argh(option)]
+    delegate: Option<String>,
+    /// run the gateway in read-only mode for given authority pubkey
+    #[argh(option)]
+    emulate: Option<String>,
+    /// solana commitment level to use for transaction confirmation (default: confirmed)
+    #[argh(option, default = "String::from(\"confirmed\")")]
+    tx_commitment: String,
+    /// solana commitment level to use for state updates (default: confirmed)
+    #[argh(option, default = "String::from(\"confirmed\")")]
+    commitment: String,
+    #[argh(switch)]
+    /// enable debug logging
+    verbose: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use actix_web::{http::Method, test, App};
@@ -303,7 +336,7 @@ mod tests {
 
     async fn setup_controller() -> AppState {
         let wallet = create_wallet(Some(get_seed()), None, None);
-        AppState::new(TEST_ENDPOINT, true, wallet).await
+        AppState::new(TEST_ENDPOINT, true, wallet, None).await
     }
 
     #[actix_web::test]
