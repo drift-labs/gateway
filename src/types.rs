@@ -248,8 +248,6 @@ pub struct PlaceOrder {
     #[serde(default)]
     reduce_only: bool,
     #[serde(default)]
-    immediate_or_cancel: bool,
-    #[serde(default)]
     oracle_price_offset: Option<Decimal>,
     max_ts: Option<i64>,
 }
@@ -310,7 +308,6 @@ impl PlaceOrder {
                 PositionDirection::Long
             },
             price,
-            immediate_or_cancel: self.immediate_or_cancel,
             reduce_only: self.reduce_only,
             post_only: if self.post_only {
                 PostOnlyParam::MustPostOnly // this will report the failure to the gateway caller
@@ -556,6 +553,11 @@ pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) ->
             .expect("market exists");
         spot_market.decimals
     }
+}
+
+#[derive(Serialize)]
+pub struct SolBalanceResponse {
+    pub balance: Decimal,
 }
 
 #[cfg(test)]

@@ -133,6 +133,11 @@ async fn get_orderbook(controller: web::Data<AppState>, body: web::Bytes) -> imp
     }
 }
 
+#[get("/balance")]
+async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
+    handle_result(controller.get_sol_balance().await)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -194,7 +199,8 @@ async fn main() -> std::io::Result<()> {
                     .service(cancel_orders)
                     .service(modify_orders)
                     .service(get_orderbook)
-                    .service(cancel_and_place_orders),
+                    .service(cancel_and_place_orders)
+                    .service(get_sol_balance),
             )
     })
     .bind((config.host, config.port))?

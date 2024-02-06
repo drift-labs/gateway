@@ -161,8 +161,7 @@ $ curl -X GET \
       "postOnly": true,
       "reduceOnly": false,
       "userOrderId": 101,
-      "orderId": 35,
-      "immediateOrCancel": false
+      "orderId": 35
     },
     {
       "orderType": "limit",
@@ -175,7 +174,6 @@ $ curl -X GET \
       "reduceOnly": false,
       "userOrderId": 103,
       "orderId": 50,
-      "immediateOrCancel": false,
       "oraclePriceOffset": "20.000000"
     }
   ]
@@ -235,7 +233,6 @@ $ curl localhost:8080/v2/orders -X POST \
         "postOnly": true,
         "orderType": "limit",
         "userOrderId": 101,
-        "immediateOrCancel": false,
         "reduceOnly": false,
         "maxTs": 1707112301
     },
@@ -322,7 +319,6 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
             "price": 99.0,
             "postOnly": true,
             "orderType": "limit",
-            "immediateOrCancel": false,
             "reduceOnly": false
         }]
     }
@@ -401,7 +397,6 @@ event payloads can be distinguished by "channel" field and the "data" payload is
                 "direction": "buy",
                 "reduceOnly": false,
                 "postOnly": false,
-                "immediateOrCancel": false,
                 "auctionDuration": 0
             },
             "ts": 1704777347,
