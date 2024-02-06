@@ -6,7 +6,7 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::Pubkey;
@@ -20,6 +20,8 @@ use types::{
 mod controller;
 mod types;
 mod websocket;
+
+pub const LOG_TARGET: &str = "gateway";
 
 #[derive(serde::Deserialize)]
 struct Args {
@@ -57,7 +59,10 @@ async fn create_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.place_orders(req, args.sub_account_id).await),
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(controller.place_orders(req, args.sub_account_id).await)
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -69,7 +74,10 @@ async fn modify_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.modify_orders(req, args.sub_account_id).await),
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(controller.modify_orders(req, args.sub_account_id).await)
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -88,6 +96,7 @@ async fn cancel_orders(
             Err(err) => return handle_deser_error(err),
         }
     };
+    debug!(target: LOG_TARGET, "request: {req:?}");
     handle_result(controller.cancel_orders(req, args.sub_account_id).await)
 }
 
@@ -98,11 +107,14 @@ async fn cancel_and_place_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
-        Ok(req) => handle_result(
-            controller
-                .cancel_and_place_orders(req, args.sub_account_id)
-                .await,
-        ),
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(
+                controller
+                    .cancel_and_place_orders(req, args.sub_account_id)
+                    .await,
+            )
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -133,12 +145,15 @@ async fn get_orderbook(controller: web::Data<AppState>, body: web::Bytes) -> imp
     }
 }
 
+#[get("/balance")]
+async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
+    handle_result(controller.get_sol_balance().await)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
-    env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    env_logger::Builder::from_default_env().init();
     let secret_key = std::env::var("DRIFT_GATEWAY_KEY");
     let delegate = config
         .delegate
@@ -194,7 +209,8 @@ async fn main() -> std::io::Result<()> {
                     .service(cancel_orders)
                     .service(modify_orders)
                     .service(get_orderbook)
-                    .service(cancel_and_place_orders),
+                    .service(cancel_and_place_orders)
+                    .service(get_sol_balance),
             )
     })
     .bind((config.host, config.port))?
@@ -225,7 +241,10 @@ struct GatewayConfig {
     emulate: Option<String>,
 }
 
-fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
+fn handle_result<T: std::fmt::Debug>(
+    result: Result<T, ControllerError>,
+) -> Either<HttpResponse, Json<T>> {
+    debug!(target: LOG_TARGET, "response: {result:?}");
     match result {
         Ok(payload) => Either::Right(Json(payload)),
         Err(ControllerError::Sdk(err)) => {
@@ -356,6 +375,24 @@ mod tests {
         let req = test::TestRequest::default()
             .method(Method::GET)
             .uri("/markets")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn get_sol_balance_works() {
+        let controller = setup_controller().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_sol_balance),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/balance")
             .to_request();
 
         let resp = test::call_service(&app, req).await;

@@ -98,7 +98,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SpotPosition {
     amount: Decimal,
@@ -127,7 +127,7 @@ impl SpotPosition {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PerpPosition {
     amount: Decimal,
@@ -248,8 +248,6 @@ pub struct PlaceOrder {
     #[serde(default)]
     reduce_only: bool,
     #[serde(default)]
-    immediate_or_cancel: bool,
-    #[serde(default)]
     oracle_price_offset: Option<Decimal>,
     max_ts: Option<i64>,
 }
@@ -310,7 +308,6 @@ impl PlaceOrder {
                 PositionDirection::Long
             },
             price,
-            immediate_or_cancel: self.immediate_or_cancel,
             reduce_only: self.reduce_only,
             post_only: if self.post_only {
                 PostOnlyParam::MustPostOnly // this will report the failure to the gateway caller
@@ -365,26 +362,26 @@ impl Market {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPositionsRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrdersRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GetOrdersResponse {
     pub orders: Vec<Order>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GetPositionsResponse {
     pub spot: Vec<SpotPosition>,
     pub perp: Vec<PerpPosition>,
@@ -439,7 +436,7 @@ pub struct AllMarketsResponse {
     pub perp: Vec<MarketInfo>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelOrdersRequest {
     /// Market to cancel orders
@@ -453,14 +450,14 @@ pub struct CancelOrdersRequest {
     pub user_ids: Option<Vec<u8>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrderbookRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TxResponse {
     tx: String,
 }
@@ -471,7 +468,7 @@ impl TxResponse {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
     pub modify: ModifyOrdersRequest,
@@ -479,6 +476,7 @@ pub struct CancelAndPlaceRequest {
 }
 
 /// Serialize DLOB with human readable numeric values
+#[derive(Debug)]
 pub struct OrderbookL2 {
     inner: L2Orderbook,
     decimals: u32,
@@ -530,7 +528,7 @@ impl<'a> Serialize for PriceLevelSerializer<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PriceLevel {
     price: Decimal,
     amount: Decimal,
@@ -556,6 +554,11 @@ pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) ->
             .expect("market exists");
         spot_market.decimals
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct SolBalanceResponse {
+    pub balance: Decimal,
 }
 
 #[cfg(test)]

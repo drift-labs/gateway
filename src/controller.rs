@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use drift_sdk::{
-    constants::ProgramData,
+    constants::{ProgramData, BASE_PRECISION},
     dlob::DLOBClient,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
@@ -10,14 +10,18 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{error, warn};
+use log::{debug, error, warn};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
-use crate::types::{
-    get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-    GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-    GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
-    SpotPosition, TxResponse,
+use crate::{
+    types::{
+        get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
+        GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
+        GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
+        SolBalanceResponse, SpotPosition, TxResponse,
+    },
+    LOG_TARGET,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -74,6 +78,19 @@ impl AppState {
             client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
         }
+    }
+
+    /// Return SOL balance of the tx signing account
+    pub async fn get_sol_balance(&self) -> GatewayResult<SolBalanceResponse> {
+        let balance = self
+            .client
+            .inner()
+            .get_balance(&self.wallet.signer())
+            .await
+            .map_err(|err| ControllerError::Sdk(err.into()))?;
+        Ok(SolBalanceResponse {
+            balance: Decimal::new(balance as i64, BASE_PRECISION.ilog10()).normalize(),
+        })
     }
 
     /// Cancel orders
@@ -304,9 +321,12 @@ impl AppState {
                 },
             )
             .await
-            .map(|s| TxResponse::new(s.to_string()))
+            .map(|s| {
+                debug!(target: LOG_TARGET, "sent tx: {}", s);
+                TxResponse::new(s.to_string())
+            })
             .map_err(|err| {
-                warn!(target: "tx", "sending {reason} tx failed: {err:?}");
+                warn!(target: LOG_TARGET, "sending {reason} tx failed: {err:?}");
                 handle_tx_err(err)
             })
     }
