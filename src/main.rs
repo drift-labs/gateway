@@ -374,7 +374,7 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
-                .service(get_markets),
+                .service(get_sol_balance),
         )
         .await;
         let req = test::TestRequest::default()
