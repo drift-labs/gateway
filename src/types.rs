@@ -98,7 +98,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SpotPosition {
     amount: Decimal,
@@ -127,7 +127,7 @@ impl SpotPosition {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PerpPosition {
     amount: Decimal,
@@ -362,26 +362,26 @@ impl Market {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPositionsRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrdersRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GetOrdersResponse {
     pub orders: Vec<Order>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GetPositionsResponse {
     pub spot: Vec<SpotPosition>,
     pub perp: Vec<PerpPosition>,
@@ -450,14 +450,14 @@ pub struct CancelOrdersRequest {
     pub user_ids: Option<Vec<u8>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetOrderbookRequest {
     #[serde(flatten)]
     pub market: Market,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TxResponse {
     tx: String,
 }
@@ -476,6 +476,7 @@ pub struct CancelAndPlaceRequest {
 }
 
 /// Serialize DLOB with human readable numeric values
+#[derive(Debug)]
 pub struct OrderbookL2 {
     inner: L2Orderbook,
     decimals: u32,
@@ -527,7 +528,7 @@ impl<'a> Serialize for PriceLevelSerializer<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PriceLevel {
     price: Decimal,
     amount: Decimal,
@@ -555,7 +556,7 @@ pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) ->
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct SolBalanceResponse {
     pub balance: Decimal,
 }

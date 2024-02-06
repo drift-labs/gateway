@@ -21,6 +21,8 @@ mod controller;
 mod types;
 mod websocket;
 
+pub const LOG_TARGET: &str = "gateway";
+
 #[derive(serde::Deserialize)]
 struct Args {
     #[serde(default, rename = "subAccountId")]
@@ -58,7 +60,7 @@ async fn create_orders(
 ) -> impl Responder {
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
         Ok(req) => {
-            debug!("request: {req:?}");
+            debug!(target: LOG_TARGET, "request: {req:?}");
             handle_result(controller.place_orders(req, args.sub_account_id).await)
         }
         Err(err) => handle_deser_error(err),
@@ -73,7 +75,7 @@ async fn modify_orders(
 ) -> impl Responder {
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
         Ok(req) => {
-            debug!("request: {req:?}");
+            debug!(target: LOG_TARGET, "request: {req:?}");
             handle_result(controller.modify_orders(req, args.sub_account_id).await)
         }
         Err(err) => handle_deser_error(err),
@@ -94,7 +96,7 @@ async fn cancel_orders(
             Err(err) => return handle_deser_error(err),
         }
     };
-    debug!("request: {req:?}");
+    debug!(target: LOG_TARGET, "request: {req:?}");
     handle_result(controller.cancel_orders(req, args.sub_account_id).await)
 }
 
@@ -106,7 +108,7 @@ async fn cancel_and_place_orders(
 ) -> impl Responder {
     match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
         Ok(req) => {
-            debug!("request: {req:?}");
+            debug!(target: LOG_TARGET, "request: {req:?}");
             handle_result(
                 controller
                     .cancel_and_place_orders(req, args.sub_account_id)
@@ -151,9 +153,7 @@ async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
-    env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    env_logger::Builder::from_default_env().init();
     let secret_key = std::env::var("DRIFT_GATEWAY_KEY");
     let delegate = config
         .delegate
@@ -241,8 +241,10 @@ struct GatewayConfig {
     emulate: Option<String>,
 }
 
-fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
-    debug!("response: {result:?}");
+fn handle_result<T: std::fmt::Debug>(
+    result: Result<T, ControllerError>,
+) -> Either<HttpResponse, Json<T>> {
+    debug!(target: LOG_TARGET, "response: {result:?}");
     match result {
         Ok(payload) => Either::Right(Json(payload)),
         Err(ControllerError::Sdk(err)) => {

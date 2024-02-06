@@ -14,11 +14,14 @@ use log::{debug, error, warn};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-use crate::types::{
-    get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-    GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-    GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
-    SolBalanceResponse, SpotPosition, TxResponse,
+use crate::{
+    types::{
+        get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
+        GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
+        GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
+        SolBalanceResponse, SpotPosition, TxResponse,
+    },
+    LOG_TARGET,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -319,11 +322,11 @@ impl AppState {
             )
             .await
             .map(|s| {
-                debug!(target: "tx", "sent tx: {}", s);
+                debug!(target: LOG_TARGET, "sent tx: {}", s);
                 TxResponse::new(s.to_string())
             })
             .map_err(|err| {
-                warn!(target: "tx", "sending {reason} tx failed: {err:?}");
+                warn!(target: LOG_TARGET, "sending {reason} tx failed: {err:?}");
                 handle_tx_err(err)
             })
     }
