@@ -436,7 +436,7 @@ pub struct AllMarketsResponse {
     pub perp: Vec<MarketInfo>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelOrdersRequest {
     /// Market to cancel orders
@@ -468,7 +468,7 @@ impl TxResponse {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
     pub modify: ModifyOrdersRequest,

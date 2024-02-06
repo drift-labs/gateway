@@ -10,7 +10,7 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{error, warn};
+use log::{debug, error, warn};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
@@ -318,7 +318,10 @@ impl AppState {
                 },
             )
             .await
-            .map(|s| TxResponse::new(s.to_string()))
+            .map(|s| {
+                debug!(target: "tx", "sent tx: {}", s);
+                TxResponse::new(s.to_string())
+            })
             .map_err(|err| {
                 warn!(target: "tx", "sending {reason} tx failed: {err:?}");
                 handle_tx_err(err)

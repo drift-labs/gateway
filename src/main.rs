@@ -6,7 +6,7 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::Pubkey;
@@ -57,7 +57,10 @@ async fn create_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.place_orders(req, args.sub_account_id).await),
+        Ok(req) => {
+            debug!("request: {req:?}");
+            handle_result(controller.place_orders(req, args.sub_account_id).await)
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -69,7 +72,10 @@ async fn modify_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.modify_orders(req, args.sub_account_id).await),
+        Ok(req) => {
+            debug!("request: {req:?}");
+            handle_result(controller.modify_orders(req, args.sub_account_id).await)
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -88,6 +94,7 @@ async fn cancel_orders(
             Err(err) => return handle_deser_error(err),
         }
     };
+    debug!("request: {req:?}");
     handle_result(controller.cancel_orders(req, args.sub_account_id).await)
 }
 
@@ -98,11 +105,14 @@ async fn cancel_and_place_orders(
     args: web::Query<Args>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
-        Ok(req) => handle_result(
-            controller
-                .cancel_and_place_orders(req, args.sub_account_id)
-                .await,
-        ),
+        Ok(req) => {
+            debug!("request: {req:?}");
+            handle_result(
+                controller
+                    .cancel_and_place_orders(req, args.sub_account_id)
+                    .await,
+            )
+        }
         Err(err) => handle_deser_error(err),
     }
 }
@@ -232,6 +242,7 @@ struct GatewayConfig {
 }
 
 fn handle_result<T>(result: Result<T, ControllerError>) -> Either<HttpResponse, Json<T>> {
+    debug!("response: {result:?}");
     match result {
         Ok(payload) => Either::Right(Json(payload)),
         Err(ControllerError::Sdk(err)) => {
