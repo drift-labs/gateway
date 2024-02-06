@@ -4,6 +4,8 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ## Build & Run
 
+⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
+
 ```bash
 # build
 cargo build --release
@@ -323,6 +325,12 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
         }]
     }
 }'
+```
+
+### Get SOL balance
+Return the SOL balance of the transaction signer
+```bash
+$ curl localhost:8080/v2/balance
 ```
 
 ## WebSockets

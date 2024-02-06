@@ -367,4 +367,22 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
     }
+
+    #[actix_web::test]
+    async fn get_sol_balance_works() {
+        let controller = setup_controller().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_markets),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/balance")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
 }
