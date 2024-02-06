@@ -41,9 +41,21 @@ Options:
   --dev             run in devnet mode
   --host            gateway host address
   --port            gateway port
-  --delegate        use delegated signing mode, provide the delegator pubkey
+  --ws-port         gateway Ws port
+  --delegate        use delegated signing mode, provide the delegators pubkey
   --emulate         run the gateway in read-only mode for given authority pubkey
-  --help            display usage information
+  --tx-commitment   solana commitment level to use for transaction confirmation
+                    (default: confirmed)
+  --commitment      solana commitment level to use for state updates (default:
+                    confirmed)
+  --verbose         enable debug logging
+```
+
+## Logging
+use env var to enable logging
+```bash
+# enable logging
+RUST_LOG=gateway=debug drift-gateway ..
 ```
 
 ## API Examples
