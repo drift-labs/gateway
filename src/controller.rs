@@ -329,7 +329,7 @@ impl AppState {
             .inner()
             .get_latest_blockhash()
             .await
-            .map_err(|err| SdkError::from(err))?;
+            .map_err(SdkError::from)?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
         let result = self
             .client
