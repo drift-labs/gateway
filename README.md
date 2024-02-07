@@ -44,10 +44,10 @@ Options:
   --ws-port         gateway Ws port
   --delegate        use delegated signing mode, provide the delegators pubkey
   --emulate         run the gateway in read-only mode for given authority pubkey
-  --tx-commitment   solana commitment level to use for transaction confirmation
+  --tx-commitment   solana commitment level to use for transaction confirmation [processed|confirmed|finalized]
                     (default: confirmed)
   --commitment      solana commitment level to use for state updates (default:
-                    confirmed)
+                    confirmed) [processed|confirmed|finalized]
   --verbose         enable debug logging
 ```
 
