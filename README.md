@@ -51,13 +51,6 @@ Options:
   --verbose         enable debug logging
 ```
 
-## Logging
-use env var to enable logging
-```bash
-# enable logging
-RUST_LOG=gateway=debug drift-gateway ..
-```
-
 ## API Examples
 
 Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
