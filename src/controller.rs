@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
@@ -324,12 +324,20 @@ impl AppState {
         tx: VersionedMessage,
         reason: &'static str,
     ) -> GatewayResult<TxResponse> {
-        self.client
-            .sign_and_send_with_config(
-                &self.wallet,
-                tx,
+        let recent_block_hash = self
+            .client
+            .inner()
+            .get_latest_blockhash()
+            .await
+            .map_err(|err| SdkError::from(err))?;
+        let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
+        let result = self
+            .client
+            .inner()
+            .send_transaction_with_config(
+                &tx,
                 RpcSendTransactionConfig {
-                    max_retries: Some(0),
+                    max_retries: Some(3),
                     preflight_commitment: Some(self.tx_commitment.commitment),
                     ..Default::default()
                 },
@@ -341,8 +349,36 @@ impl AppState {
             })
             .map_err(|err| {
                 warn!(target: LOG_TARGET, "sending {reason} tx failed: {err:?}");
-                handle_tx_err(err)
-            })
+                handle_tx_err(err.into())
+            });
+
+        // tx has some program/logic error, retry won't fix
+        if let Err(ControllerError::TxFailed { .. }) = result {
+            return result;
+        }
+
+        // double send the tx to help chances of landing
+        let client = Arc::clone(&self.client);
+        let commitment = self.tx_commitment.commitment;
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            if let Err(err) = client
+                .inner()
+                .send_transaction_with_config(
+                    &tx,
+                    RpcSendTransactionConfig {
+                        max_retries: Some(0),
+                        preflight_commitment: Some(commitment),
+                        ..Default::default()
+                    },
+                )
+                .await
+            {
+                error!(target: LOG_TARGET, "retry tx failed: {err:?}");
+            }
+        });
+
+        result
     }
 }
 
