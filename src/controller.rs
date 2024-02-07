@@ -11,7 +11,7 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{debug, error, warn};
+use log::{debug, warn};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
@@ -374,7 +374,7 @@ impl AppState {
                 )
                 .await
             {
-                error!(target: LOG_TARGET, "retry tx failed: {err:?}");
+                warn!(target: LOG_TARGET, "retry tx failed: {err:?}");
             }
         });
 
