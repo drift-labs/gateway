@@ -344,11 +344,11 @@ impl AppState {
             )
             .await
             .map(|s| {
-                debug!(target: LOG_TARGET, "sent tx: {}", s);
+                debug!(target: LOG_TARGET, "sent tx ({reason}): {s}");
                 TxResponse::new(s.to_string())
             })
             .map_err(|err| {
-                warn!(target: LOG_TARGET, "sending {reason} tx failed: {err:?}");
+                warn!(target: LOG_TARGET, "sending tx ({reason}) failed: {err:?}");
                 handle_tx_err(err.into())
             });
 
