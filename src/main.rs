@@ -11,7 +11,7 @@ use log::{debug, info, warn};
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::{types::CommitmentConfig, Pubkey};
 use serde_json::json;
-use std::{borrow::Borrow, str::FromStr, sync::Arc};
+use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest,
     PlaceOrdersRequest,
@@ -234,6 +234,7 @@ async fn main() -> std::io::Result<()> {
                     .service(get_sol_balance),
             )
     })
+    .keep_alive(Duration::from_secs(3_600))
     .bind((config.host, config.port))?
     .run()
     .await
