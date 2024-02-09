@@ -234,7 +234,7 @@ async fn main() -> std::io::Result<()> {
                     .service(get_sol_balance),
             )
     })
-    .keep_alive(Duration::from_secs(3_600))
+    .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
     .bind((config.host, config.port))?
     .run()
     .await
@@ -300,6 +300,9 @@ struct GatewayConfig {
     /// gateway Ws port
     #[argh(option, default = "1337")]
     ws_port: u16,
+    /// http keep-alive timeout in seconds
+    #[argh(option, default = "3600")]
+    keep_alive_timeout: u32,
     /// use delegated signing mode, provide the delegator's pubkey
     #[argh(option)]
     delegate: Option<String>,
