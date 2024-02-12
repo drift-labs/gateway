@@ -1354,7 +1354,7 @@ dependencies = [
 [[package]]
 name = "drift"
 version = "2.56.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#71fb2a6f5f94c0c7ddf87bcdfc40128098b715ef"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#9e6c0a6d2fbe9b5c1af8b2aa31ffe13a4fa2b661"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1407,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#71fb2a6f5f94c0c7ddf87bcdfc40128098b715ef"
+source = "git+https://github.com/circuit-research/protocol-v2?branch=cargo-add-sdk#9e6c0a6d2fbe9b5c1af8b2aa31ffe13a4fa2b661"
 dependencies = [
  "anchor-lang",
  "base64 0.13.1",
