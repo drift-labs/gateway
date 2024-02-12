@@ -10,7 +10,7 @@ use drift_sdk::{
     Pubkey, Wallet,
 };
 use futures_util::{SinkExt, StreamExt};
-use log::info;
+use log::{info, warn};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
@@ -95,9 +95,8 @@ async fn accept_connection(
                                 PubsubClient::new(ws_endpoint.as_str())
                                     .await
                                     .expect("ws connect"),
-                                RpcClient::new(ws_endpoint.replace("ws", "http")),
                                 sub_account_address,
-                                retry_policy::exponential_backoff(3),
+                                retry_policy::forever(5),
                             );
 
                             let join_handle = tokio::spawn({
@@ -122,6 +121,8 @@ async fn accept_connection(
                                             .await
                                             .expect("capacity");
                                     }
+                                    warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}, sending close");
+                                    let _ = message_tx.send(Message::Close(None)).await;
                                 }
                             });
 
