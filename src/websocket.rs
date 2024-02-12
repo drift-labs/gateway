@@ -5,7 +5,7 @@ use std::ops::Neg;
 use drift_sdk::{
     async_utils::retry_policy::{self},
     constants::ProgramData,
-    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient, RpcClient},
+    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient},
     types::{MarketType, Order, OrderType, PositionDirection},
     Pubkey, Wallet,
 };

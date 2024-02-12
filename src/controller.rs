@@ -40,6 +40,8 @@ pub enum ControllerError {
 #[derive(Clone)]
 pub struct AppState {
     pub wallet: Wallet,
+    /// true if gateway is using delegated signing
+    delegated: bool,
     pub client: Arc<DriftClient<WsAccountProvider>>,
     dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
@@ -86,6 +88,7 @@ impl AppState {
         };
 
         Self {
+            delegated: wallet.is_delegated(),
             wallet,
             client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
@@ -127,10 +130,9 @@ impl AppState {
             self.client.program_data(),
             sub_account,
             Cow::Owned(account_data?),
+            self.delegated,
         )
-        .priority_fee(pf)
-        .payer(self.wallet.signer());
-
+        .priority_fee(pf);
         let tx = build_cancel_ix(builder, req)?.build();
         self.send_tx(tx, "cancel_orders").await
     }
@@ -245,11 +247,11 @@ impl AppState {
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
-            self.wallet.sub_account(0),
+            self.wallet.sub_account(sub_account_id),
             Cow::Owned(account_data?),
+            self.delegated,
         )
-        .priority_fee(pf)
-        .payer(self.wallet.signer());
+        .priority_fee(pf);
 
         let builder = build_cancel_ix(builder, req.cancel)?;
         let tx = build_modify_ix(builder, req.modify, self.client.program_data())?
@@ -281,10 +283,10 @@ impl AppState {
         let tx = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Borrowed(&account_data?),
+            Cow::Owned(account_data?),
+            self.delegated,
         )
         .priority_fee(pf)
-        .payer(self.wallet.signer())
         .place_orders(orders)
         .build();
 
@@ -306,9 +308,9 @@ impl AppState {
             self.client.program_data(),
             sub_account,
             Cow::Owned(account_data?),
+            self.delegated,
         )
-        .priority_fee(pf)
-        .payer(self.wallet.signer());
+        .priority_fee(pf);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders").await
     }

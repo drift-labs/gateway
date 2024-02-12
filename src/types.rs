@@ -537,8 +537,8 @@ pub struct PriceLevel {
 impl PriceLevel {
     pub fn new(level: &dlob::L2Level, decimals: u32) -> Self {
         Self {
-            price: Decimal::new(level.price as i64, PRICE_PRECISION.ilog10()),
-            amount: Decimal::new(level.size as i64, decimals),
+            price: Decimal::new(level.price, PRICE_PRECISION.ilog10()),
+            amount: Decimal::new(level.size, decimals),
         }
     }
 }
