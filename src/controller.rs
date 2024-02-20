@@ -8,7 +8,7 @@ use drift_sdk::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
     },
-    AccountProvider, DriftClient, Pubkey, TransactionBuilder, Wallet, WsAccountProvider,
+    AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
@@ -42,7 +42,7 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
-    pub client: Arc<DriftClient<WsAccountProvider>>,
+    pub client: Arc<DriftClient<RpcAccountProvider>>,
     dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
@@ -74,9 +74,7 @@ impl AppState {
             Context::MainNet
         };
 
-        let account_provider = WsAccountProvider::new_with_commitment(endpoint, state_commitment)
-            .await
-            .expect("ws connects");
+        let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
         let client = DriftClient::new(context, account_provider)
             .await
             .expect("ok");
@@ -513,7 +511,7 @@ mod tests {
     #[tokio::test]
     async fn test_pf() {
         // flakey needs a mainnet RPC getProgramAccounts
-        let account_provider = WsAccountProvider::new("https://api.devnet.solana.com")
+        let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com")
             .await
             .expect("ws connects");
         let client = DriftClient::new(Context::DevNet, account_provider)
