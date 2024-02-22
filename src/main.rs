@@ -13,7 +13,7 @@ use drift_sdk::{types::CommitmentConfig, Pubkey};
 use serde_json::json;
 use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
-    CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, ModifyOrdersRequest,
+    CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, Market, ModifyOrdersRequest,
     PlaceOrdersRequest,
 };
 
@@ -137,6 +137,20 @@ async fn get_positions(
     handle_result(controller.get_positions(req, args.sub_account_id).await)
 }
 
+#[get("/positionsExt/{index}")]
+async fn get_positions_extended(
+    controller: web::Data<AppState>,
+    path: web::Path<u16>,
+    args: web::Query<Args>,
+) -> impl Responder {
+    let index = path.into_inner();
+    handle_result(
+        controller
+            .get_position_extended(args.sub_account_id, Market::perp(index))
+            .await,
+    )
+}
+
 #[get("/orderbook")]
 async fn get_orderbook(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
     match serde_json::from_slice::<'_, GetOrderbookRequest>(body.as_ref()) {
@@ -231,7 +245,8 @@ async fn main() -> std::io::Result<()> {
                     .service(modify_orders)
                     .service(get_orderbook)
                     .service(cancel_and_place_orders)
-                    .service(get_sol_balance),
+                    .service(get_sol_balance)
+                    .service(get_positions_extended),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))

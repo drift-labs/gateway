@@ -4,6 +4,7 @@ use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     dlob::DLOBClient,
     event_subscriber::CommitmentConfig,
+    liquidation::calculate_liquidation_price,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
@@ -19,8 +20,9 @@ use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-        GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PlaceOrdersRequest,
-        SolBalanceResponse, SpotPosition, TxResponse,
+        GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PerpPosition,
+        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxResponse,
+        PRICE_DECIMALS,
     },
     LOG_TARGET,
 };
@@ -75,7 +77,7 @@ impl AppState {
         };
 
         let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
-        let client = DriftClient::new(context, account_provider)
+        let client = DriftClient::new(context, account_provider, wallet.clone())
             .await
             .expect("ok");
 
@@ -130,7 +132,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .priority_fee(pf);
+        .with_priority_fee(pf, None);
         let tx = build_cancel_ix(builder, req)?.build();
         self.send_tx(tx, "cancel_orders").await
     }
@@ -181,6 +183,39 @@ impl AppState {
                 .map(|x| (*x).into())
                 .collect(),
         })
+    }
+
+    pub async fn get_position_extended(
+        &self,
+        sub_account_id: u16,
+        market: Market,
+    ) -> GatewayResult<PerpPosition> {
+        if let Some(perp_position) = self
+            .client
+            .perp_position(
+                &self.wallet.sub_account(sub_account_id),
+                market.market_index,
+            )
+            .await?
+        {
+            let unrealized_pnl = perp_position
+                .get_unrealized_pnl(self.client.oracle_price(market.as_market_id()).await?);
+            let user = self
+                .client
+                .get_user_account(&self.wallet.sub_account(sub_account_id))
+                .await?;
+            let liquidation_price =
+                calculate_liquidation_price(&self.client, &user, market.market_index).await?;
+            let mut p: PerpPosition = perp_position.into();
+            p.set_extended_info(PerpPositionExtended {
+                liquidation_price: Decimal::new(liquidation_price, PRICE_DECIMALS),
+                unrealized_pnl: Decimal::new(unrealized_pnl.unwrap() as i64, PRICE_DECIMALS),
+            });
+
+            Ok(p)
+        } else {
+            Err(ControllerError::BadRequest("no position".to_string()))
+        }
     }
 
     /// Return orders by market if given, otherwise return all orders
@@ -249,7 +284,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .priority_fee(pf);
+        .with_priority_fee(pf, None);
 
         let builder = build_cancel_ix(builder, req.cancel)?;
         let tx = build_modify_ix(builder, req.modify, self.client.program_data())?
@@ -284,7 +319,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .priority_fee(pf)
+        .with_priority_fee(pf, None)
         .place_orders(orders)
         .build();
 
@@ -308,7 +343,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .priority_fee(pf);
+        .with_priority_fee(pf, None);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders").await
     }
