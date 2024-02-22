@@ -511,9 +511,7 @@ mod tests {
     #[tokio::test]
     async fn test_pf() {
         // flakey needs a mainnet RPC getProgramAccounts
-        let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com")
-            .await
-            .expect("ws connects");
+        let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com");
         let client = DriftClient::new(Context::DevNet, account_provider)
             .await
             .expect("ok");
