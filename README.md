@@ -433,6 +433,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
             "fee": "0.002581",
             "amount": "0.1",
             "price": "103.22087",
+            "marketIndex": 0,
+            "marketType": "perp",
             "orderId": 157,
             "ts": 1704777355,
             "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"

@@ -199,6 +199,9 @@ enum AccountEvent {
         amount: Decimal,
         price: Decimal,
         order_id: u32,
+        market_index: u16,
+        #[serde(serialize_with = "ser_market_type")]
+        market_type: MarketType,
         ts: u64,
         signature: String,
     },
@@ -239,6 +242,8 @@ impl AccountEvent {
         ts: u64,
         decimals: u32,
         signature: &String,
+        market_index: u16,
+        market_type: MarketType,
     ) -> Self {
         let base_amount = Decimal::new(base_amount as i64, decimals);
         let price = Decimal::new(quote_amount as i64, PRICE_DECIMALS) / base_amount;
@@ -254,6 +259,8 @@ impl AccountEvent {
             amount: base_amount.normalize(),
             ts,
             signature: signature.to_string(),
+            market_index,
+            market_type,
         }
     }
 }
@@ -409,6 +416,8 @@ fn map_drift_event(
                     *ts,
                     decimals,
                     signature,
+                    *market_index,
+                    *market_type,
                 )
             } else {
                 AccountEvent::fill(
@@ -420,6 +429,8 @@ fn map_drift_event(
                     *ts,
                     decimals,
                     signature,
+                    *market_index,
+                    *market_type,
                 )
             };
 
