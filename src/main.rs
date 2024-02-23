@@ -363,9 +363,7 @@ struct GatewayConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Debug;
-
-    use actix_web::{body::MessageBody, http::Method, test, App};
+    use actix_web::{http::Method, test, App};
 
     use crate::types::Market;
 
