@@ -1,8 +1,7 @@
-use std::{borrow::Cow, sync::Arc, time::Duration};
-
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     dlob::DLOBClient,
+    event_subscriber::try_parse_log,
     event_subscriber::CommitmentConfig,
     liquidation::calculate_liquidation_price,
     types::{
@@ -14,6 +13,10 @@ use drift_sdk::{
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use rust_decimal::Decimal;
+use solana_client::rpc_config::RpcTransactionConfig;
+use solana_sdk::{account::Account, signature::Signature};
+use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
+use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
 
 use crate::{
@@ -21,9 +24,10 @@ use crate::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
         GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxResponse,
-        PRICE_DECIMALS,
+        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
+        TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
+    websocket::{map_drift_event_for_account, AccountEvent},
     LOG_TARGET,
 };
 
@@ -119,9 +123,11 @@ impl AppState {
     pub async fn cancel_orders(
         &self,
         req: CancelOrdersRequest,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -141,9 +147,11 @@ impl AppState {
     pub async fn get_positions(
         &self,
         req: Option<GetPositionsRequest>,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let (all_spot, all_perp) = self.client.all_positions(&sub_account).await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
@@ -187,10 +195,12 @@ impl AppState {
 
     pub async fn get_position_extended(
         &self,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
         market: Market,
     ) -> GatewayResult<PerpPosition> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         if let Some(perp_position) = self
             .client
             .perp_position(&sub_account, market.market_index)
@@ -220,9 +230,11 @@ impl AppState {
     pub async fn get_orders(
         &self,
         req: Option<GetOrdersRequest>,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<GetOrdersResponse> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let orders = self.client.all_orders(&sub_account).await?;
         Ok(GetOrdersResponse {
             orders: orders
@@ -258,7 +270,7 @@ impl AppState {
     pub async fn cancel_and_place_orders(
         &self,
         req: CancelAndPlaceRequest,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
         let orders = req
             .place
@@ -270,7 +282,9 @@ impl AppState {
             })
             .collect();
 
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -278,7 +292,7 @@ impl AppState {
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
-            self.wallet.sub_account(sub_account_id),
+            sub_account,
             Cow::Owned(account_data?),
             self.delegated,
         )
@@ -295,9 +309,11 @@ impl AppState {
     pub async fn place_orders(
         &self,
         req: PlaceOrdersRequest,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -327,9 +343,11 @@ impl AppState {
     pub async fn modify_orders(
         &self,
         req: ModifyOrdersRequest,
-        sub_account_id: u16,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.wallet.sub_account(sub_account_id);
+        let sub_account = sub_account_id
+            .map(|s| self.wallet.sub_account(s))
+            .unwrap_or(self.default_sub_account());
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -350,6 +368,69 @@ impl AppState {
         let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
         let decimals = get_market_decimals(self.client.program_data(), req.market);
         Ok(OrderbookL2::new(book, decimals))
+    }
+
+    pub async fn get_tx_events_for_subaccount_id(
+        &self,
+        tx_sig: &str,
+        sub_account_id: Option<u16>,
+    ) -> GatewayResult<TxEventsResponse> {
+        let signature = Signature::from_str(&tx_sig)
+            .map_err(|err| {
+                warn!(target: LOG_TARGET, "failed to parse transaction signature: {err:?}");
+                err
+            })
+            .unwrap();
+
+        match self
+            .client
+            .inner()
+            .get_transaction_with_config(
+                &signature,
+                RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::Base64),
+                    commitment: if self.tx_commitment.is_processed() {
+                        Some(CommitmentConfig::confirmed())
+                    } else {
+                        Some(self.tx_commitment)
+                    },
+                    max_supported_transaction_version: Some(0),
+                },
+            )
+            .await
+        {
+            Ok(tx) => {
+                let mut events = Vec::new();
+                if let Some(meta) = tx.transaction.meta {
+                    match meta.log_messages {
+                        OptionSerializer::Some(logs) => {
+                            let sub_account = sub_account_id
+                                .map(|s| self.wallet.sub_account(s))
+                                .unwrap_or(self.default_sub_account());
+                            for log in logs {
+                                if let Some(evt) = try_parse_log(log.as_str(), tx_sig) {
+                                    let (_, gw_event) = map_drift_event_for_account(
+                                        self.client.program_data(),
+                                        &evt,
+                                        sub_account,
+                                    );
+                                    if let AccountEvent::Empty = gw_event {
+                                        continue;
+                                    }
+                                    events.push(gw_event);
+                                }
+                            }
+                        }
+                        OptionSerializer::None | OptionSerializer::Skip => {}
+                    }
+                }
+                Ok(TxEventsResponse::new(events))
+            }
+            Err(err) => {
+                warn!(target: LOG_TARGET, "failed to get transaction: {err:?}");
+                Ok(TxEventsResponse::default())
+            }
+        }
     }
 
     async fn send_tx(
