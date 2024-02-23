@@ -229,21 +229,13 @@ $ curl localhost:8080/v2/positionInfo/0
 **Response**
 ```json
 {
-  "spot": [
-    {
-      "amount": "0.400429",
-      "type": "deposit",
-      "marketIndex": 0
-    },
-    {
-      "amount": "9.971961702",
-      "type": "deposit",
-      "marketIndex": 1
-    }
-  ],
-  "perp": []
+  "amount": "-3.3",
+  "averageEntry": "102.2629",
+  "marketIndex": 0,
+  "liquidationPrice": "213.405881",
+  "unrealizedPnl": "-0.305832"
 }
-``
+```
 
 ### Place Orders
 
