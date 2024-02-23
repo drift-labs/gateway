@@ -172,6 +172,7 @@ enum Method {
 enum Channel {
     Fills,
     Orders,
+    Funding,
 }
 
 #[derive(Deserialize, Debug)]
@@ -229,6 +230,12 @@ enum AccountEvent {
         fee: Decimal,
         ts: u64,
         signature: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    FundingPayment {
+        amount: Decimal,
+        market_index: u16,
+        ts: u64,
     },
 }
 
@@ -504,5 +511,18 @@ fn map_drift_event(
                 },
             )
         }
+        DriftEvent::FundingPayment {
+            amount,
+            market_index,
+            ts,
+            ..
+        } => (
+            Channel::Funding,
+            AccountEvent::FundingPayment {
+                amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
+                market_index: *market_index,
+                ts: *ts,
+            },
+        ),
     }
 }

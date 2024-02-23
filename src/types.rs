@@ -135,10 +135,12 @@ pub struct PerpPosition {
     market_index: u16,
     #[serde(skip)]
     inner: sdk_types::PerpPosition,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    extended: Option<PerpPositionExtended>,
 }
 
 impl PerpPosition {
-    pub fn calculate_unrealized_pnl(&mut self, oracle_price: i64) -> Decimal {
+    pub fn calculate_unrealized_pnl(&self, oracle_price: i64) -> Decimal {
         Decimal::new(
             self.inner
                 .get_unrealized_pnl(oracle_price)
@@ -146,20 +148,32 @@ impl PerpPosition {
             PRICE_DECIMALS,
         )
     }
+    pub fn set_extended_info(&mut self, ext: PerpPositionExtended) {
+        self.extended = Some(ext);
+    }
 }
 
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
         let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
-        let average_entry = Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS) / amount;
+        let average_entry =
+            Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS) / amount.abs();
 
         Self {
             amount: amount.normalize(),
             market_index: value.market_index,
             average_entry: average_entry.normalize().round_dp(4),
             inner: value,
+            extended: None,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PerpPositionExtended {
+    pub liquidation_price: Decimal,
+    pub unrealized_pnl: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
