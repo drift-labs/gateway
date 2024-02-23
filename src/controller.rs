@@ -549,7 +549,9 @@ mod tests {
             Context::DevNet,
             account_provider,
             Wallet::read_only(Pubkey::new_unique()),
-        );
+        )
+        .await
+        .unwrap();
 
         assert!(get_priority_fee(&client).await > 0);
     }
