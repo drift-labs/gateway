@@ -278,6 +278,13 @@ A response for a transaction not found. You should consider this transaction as 
 }
 ```
 
+A response for a transaction that was found, but doesn't contain any events for the user
+```json
+{
+  "events": []
+}
+```
+
 
 ### Place Orders
 
