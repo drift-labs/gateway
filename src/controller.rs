@@ -13,7 +13,10 @@ use drift_sdk::{
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use rust_decimal::Decimal;
-use solana_client::rpc_config::RpcTransactionConfig;
+use solana_client::{
+    client_error::{ClientError, ClientErrorKind},
+    rpc_config::RpcTransactionConfig,
+};
 use solana_sdk::{account::Account, signature::Signature};
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
@@ -41,6 +44,8 @@ pub enum ControllerError {
     BadRequest(String),
     #[error("tx failed ({code}): {reason}")]
     TxFailed { reason: String, code: u32 },
+    #[error("tx not found: {tx_sig}")]
+    TxNotFound { tx_sig: String },
 }
 
 #[derive(Clone)]
@@ -404,6 +409,7 @@ impl AppState {
             .await
         {
             Ok(tx) => {
+                println!("aaaaa tx: {:#?}", tx);
                 let mut events = Vec::new();
                 if let Some(meta) = tx.transaction.meta {
                     match meta.log_messages {
@@ -431,8 +437,15 @@ impl AppState {
                 Ok(TxEventsResponse::new(events))
             }
             Err(err) => {
-                warn!(target: LOG_TARGET, "failed to get transaction: {err:?}");
-                Ok(TxEventsResponse::default())
+                let tx_error = err.get_transaction_error();
+                warn!(target: LOG_TARGET, "failed to get transaction: {err:?}, tx_error: {tx_error:?}");
+                if matches!(err.kind(), ClientErrorKind::SerdeJson(_)) {
+                    Err(ControllerError::TxNotFound {
+                        tx_sig: tx_sig.to_string(),
+                    })
+                } else {
+                    Ok(TxEventsResponse::default())
+                }
             }
         }
     }

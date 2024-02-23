@@ -46,7 +46,7 @@ Options:
   --emulate                       run the gateway in read-only mode for given authority pubkey
   --tx-commitment                 solana commitment level for transaction confirmation [processed|confirmed|finalized] (default: confirmed)
   --commitment                    solana commitment level for state updates [processed|confirmed|finalized] (default: confirmed)
-  --default-sub-account-id        default sub account ID for account related operations (default: 0)
+  --default-sub-account-id        default sub-account ID for account related operations (default: 0)
   --verbose                       enable debug logging
 ```
 
@@ -240,12 +240,15 @@ $ curl localhost:8080/v2/positionInfo/0
 gets the transaction and parses events relevant to the provided user `subAccountId` (default will be used otherwise). Only events relevant to
 the provided user will be returned.
 
+
 ```bash
 # get events from tx hash 5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5 for my subAccountId 0
 $ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5?subAccountId=0
 ```
 
 **Response**
+
+A response with a fill belonging to sub-account 0
 ```json
 {
   "events": [
@@ -264,6 +267,14 @@ $ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkw
       }
     }
   ]
+}
+```
+
+A response for a transaction not found. You should consider this transaction as dropped after around 5 seconds.
+```json
+{
+  "code": 404,
+  "reason": "tx not found: 4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms"
 }
 ```
 
@@ -559,7 +570,7 @@ Use the drift UI or Ts/Python SDK to assign a delegator key.
 see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
 
 ## Sub-account Switching
-By default the gateway uses the drift sub-account (index 0)
+By default the gateway will perform all account operations on sub-account 0, you can overwrite this default by setting the `--default-sub-account-id` flag on startup.
 
 A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
 

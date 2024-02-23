@@ -300,6 +300,14 @@ fn handle_result<T: std::fmt::Debug>(
                 }
             )))
         }
+        Err(ControllerError::TxNotFound { tx_sig }) => {
+            Either::Left(HttpResponse::NotFound().json(json!(
+                {
+                    "code": 404,
+                    "reason": format!("tx not found: {}", tx_sig),
+                }
+            )))
+        }
     }
 }
 
@@ -542,6 +550,35 @@ mod tests {
         let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let expect_body = json!({
             "events": []
+        });
+        assert_eq!(events, expect_body, "incorrect resp body");
+    }
+
+    #[actix_web::test]
+    async fn get_tx_events_doesnt_exit() {
+        let controller = setup_controller(Some(
+            Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
+        ))
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_tx_events),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/transactionEvent/4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms?subAccountId=1")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_client_error());
+
+        let body_bytes = test::read_body(resp).await;
+        let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let expect_body = json!({
+            "code": 404,
+            "reason": "tx not found: 4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms"
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }
