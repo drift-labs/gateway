@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 actix-web = "4.4.0"
 argh = "0.1.12"
-drift-sdk = { git = "https://github.com/circuit-research/protocol-v2", rev = "94cf316c" }
+drift-sdk = { git = "https://github.com/circuit-research/protocol-v2", branch = "cargo-add-sdk" }
 env_logger = "0.10.1"
 futures-util = "0.3.29"
 log = "0.4.20"

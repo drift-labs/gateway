@@ -219,6 +219,32 @@ localhost:8080/v2/positions
 }
 ```
 
+### Get Position Info (perps only)
+get extended position info for perps positions
+```bash
+# query info for perp market 0
+$ curl localhost:8080/v2/positionInfo/0
+```
+
+**Response**
+```json
+{
+  "spot": [
+    {
+      "amount": "0.400429",
+      "type": "deposit",
+      "marketIndex": 0
+    },
+    {
+      "amount": "9.971961702",
+      "type": "deposit",
+      "marketIndex": 1
+    }
+  ],
+  "perp": []
+}
+``
+
 ### Place Orders
 
 - use sub-zero `amount` to indicate sell/offer order
@@ -369,7 +395,7 @@ event payloads can be distinguished by "channel" field and the "data" payload is
 ```
 
 **order expired**
-- if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.  
+- if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.
 ```json
 {
     "data": {
@@ -473,6 +499,26 @@ this event may be safely ignored, it is added in an effort to help order life-cy
 }
 ```
 
+**funding payment**
+
+settled funding payment event for open perp positions
+
+- `amount` is usdc
+
+```json
+{
+    "data": {
+        "fundingPayment": {
+            "amount": "0.005558",
+            "marketIndex": 0,
+            "ts": 1708664443
+        }
+    },
+    "channel": "funding",
+    "subAccountId": 0
+}
+```
+
 ## Emulation Mode
 Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
 
@@ -505,8 +551,8 @@ error responses have the following JSON structure:
 }
 ```
 
-Some endpoints send transactions to the drift program and can return program error codes.  
-The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)  
+Some endpoints send transactions to the drift program and can return program error codes.
+The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)
 
 ### Common Errors
 `AccountNotFound` usually means the drift user (sub)account has not been initialized.

@@ -190,22 +190,20 @@ impl AppState {
         sub_account_id: u16,
         market: Market,
     ) -> GatewayResult<PerpPosition> {
+        let sub_account = self.wallet.sub_account(sub_account_id);
         if let Some(perp_position) = self
             .client
-            .perp_position(
-                &self.wallet.sub_account(sub_account_id),
-                market.market_index,
-            )
+            .perp_position(&sub_account, market.market_index)
             .await?
         {
-            let unrealized_pnl = perp_position
-                .get_unrealized_pnl(self.client.oracle_price(market.as_market_id()).await?);
-            let user = self
-                .client
-                .get_user_account(&self.wallet.sub_account(sub_account_id))
-                .await?;
+            let (oracle_price, user) = tokio::join!(
+                self.client.oracle_price(market.as_market_id()),
+                self.client.get_user_account(&sub_account)
+            );
+
+            let unrealized_pnl = perp_position.get_unrealized_pnl(oracle_price?);
             let liquidation_price =
-                calculate_liquidation_price(&self.client, &user, market.market_index).await?;
+                calculate_liquidation_price(&self.client, &user?, market.market_index).await?;
             let mut p: PerpPosition = perp_position.into();
             p.set_extended_info(PerpPositionExtended {
                 liquidation_price: Decimal::new(liquidation_price, PRICE_DECIMALS),
@@ -547,9 +545,11 @@ mod tests {
     async fn test_pf() {
         // flakey needs a mainnet RPC getProgramAccounts
         let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com");
-        let client = DriftClient::new(Context::DevNet, account_provider)
-            .await
-            .expect("ok");
+        let client = DriftClient::new(
+            Context::DevNet,
+            account_provider,
+            Wallet::read_only(Pubkey::new_unique()),
+        );
 
         assert!(get_priority_fee(&client).await > 0);
     }

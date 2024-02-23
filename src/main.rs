@@ -137,7 +137,7 @@ async fn get_positions(
     handle_result(controller.get_positions(req, args.sub_account_id).await)
 }
 
-#[get("/positions/{index}")]
+#[get("/positionInfo/{index}")]
 async fn get_positions_extended(
     controller: web::Data<AppState>,
     path: web::Path<u16>,
