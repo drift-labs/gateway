@@ -38,17 +38,16 @@ Positional Arguments:
   rpc_host          the solana RPC URL
 
 Options:
-  --dev             run in devnet mode
-  --host            gateway host address
-  --port            gateway port
-  --ws-port         gateway Ws port
-  --delegate        use delegated signing mode, provide the delegators pubkey
-  --emulate         run the gateway in read-only mode for given authority pubkey
-  --tx-commitment   solana commitment level to use for transaction confirmation [processed|confirmed|finalized]
-                    (default: confirmed)
-  --commitment      solana commitment level to use for state updates (default:
-                    confirmed) [processed|confirmed|finalized]
-  --verbose         enable debug logging
+  --dev                           run in devnet mode
+  --host                          gateway host address
+  --port                          gateway port
+  --ws-port                       gateway Ws port
+  --delegate                      use delegated signing mode, provide the delegators pubkey
+  --emulate                       run the gateway in read-only mode for given authority pubkey
+  --tx-commitment                 solana commitment level for transaction confirmation [processed|confirmed|finalized] (default: confirmed)
+  --commitment                    solana commitment level for state updates [processed|confirmed|finalized] (default: confirmed)
+  --default-sub-account-id        default sub account ID for account related operations (default: 0)
+  --verbose                       enable debug logging
 ```
 
 ## API Examples
@@ -236,6 +235,38 @@ $ curl localhost:8080/v2/positionInfo/0
   "unrealizedPnl": "-0.305832"
 }
 ```
+
+### Get Transaction Events
+gets the transaction and parses events relevant to the provided user `subAccountId` (default will be used otherwise). Only events relevant to
+the provided user will be returned.
+
+```bash
+# get events from tx hash 5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5 for my subAccountId 0
+$ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5?subAccountId=0
+```
+
+**Response**
+```json
+{
+  "events": [
+    {
+      "fill": {
+        "side": "buy",
+        "fee": "0.129744",
+        "amount": "5",
+        "price": "103.7945822",
+        "oraclePrice": "102.386992",
+        "orderId": 436,
+        "marketIndex": 0,
+        "marketType": "perp",
+        "ts": 1708684880,
+        "signature": "5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5"
+      }
+    }
+  ]
+}
+```
+
 
 ### Place Orders
 

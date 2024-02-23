@@ -207,6 +207,7 @@ async fn main() -> std::io::Result<()> {
         config.dev,
         wallet,
         Some((state_commitment, tx_commitment)),
+        Some(config.default_sub_account_id),
     )
     .await;
 
@@ -344,6 +345,9 @@ struct GatewayConfig {
     /// solana commitment level to use for state updates (default: confirmed)
     #[argh(option, default = "String::from(\"confirmed\")")]
     commitment: String,
+    /// default sub_account_id to use (default: 0)
+    #[argh(option, default = "0")]
+    default_sub_account_id: u16,
     #[argh(switch)]
     /// enable debug logging
     verbose: bool,
@@ -375,7 +379,7 @@ mod tests {
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None).await
+        AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
     }
 
     #[actix_web::test]

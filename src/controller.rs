@@ -52,6 +52,8 @@ pub struct AppState {
     dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
+    /// default sub_account_id to use if not provided
+    default_subaccount_id: u16,
 }
 
 impl AppState {
@@ -64,13 +66,14 @@ impl AppState {
         self.wallet.signer()
     }
     pub fn default_sub_account(&self) -> Pubkey {
-        self.wallet.default_sub_account()
+        self.wallet.sub_account(self.default_subaccount_id)
     }
     pub async fn new(
         endpoint: &str,
         devnet: bool,
         wallet: Wallet,
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
+        default_subaccount_id: Option<u16>,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -97,6 +100,7 @@ impl AppState {
             client: Arc::new(client),
             dlob_client: DLOBClient::new(dlob_endpoint),
             tx_commitment,
+            default_subaccount_id: default_subaccount_id.unwrap_or(0),
         }
     }
 
