@@ -58,7 +58,7 @@ async fn accept_connection(
 ) {
     let addr = stream.peer_addr().expect("peer address");
     let ws_stream = accept_async(stream).await.expect("Ws handshake");
-    info!("accepted Ws connection: {}", addr);
+    info!(target: LOG_TARGET, "accepted Ws connection: {}", addr);
 
     let (mut ws_out, mut ws_in) = ws_stream.split();
     let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Message>(32);
@@ -176,7 +176,7 @@ async fn accept_connection(
             _ => (),
         }
     }
-    info!("closing Ws connection: {}", addr);
+    info!(target: LOG_TARGET, "closing Ws connection: {}", addr);
 }
 
 #[derive(Deserialize, Debug)]
