@@ -374,7 +374,7 @@ impl AppState {
         tx_sig: &str,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<TxEventsResponse> {
-        let signature = Signature::from_str(&tx_sig).map_err(|err| {
+        let signature = Signature::from_str(tx_sig).map_err(|err| {
             warn!(target: LOG_TARGET, "failed to parse transaction signature: {err:?}");
             ControllerError::BadRequest(format!("failed to parse transaction signature: {err:?}"))
         })?;
