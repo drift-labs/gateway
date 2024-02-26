@@ -12,8 +12,9 @@ use drift_sdk::{
 use futures_util::{SinkExt, StreamExt};
 use log::{info, warn};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::json;
+use solana_sdk::account::Account;
 use tokio::{
     net::{TcpListener, TcpStream},
     task::JoinHandle,
@@ -104,11 +105,14 @@ async fn accept_connection(
                                 let message_tx = message_tx.clone();
                                 async move {
                                     while let Some(ref update) = event_stream.next().await {
-                                        let (channel, data) = map_drift_event(
+                                        let (channel, data) = map_drift_event_for_account(
                                             program_data,
                                             update,
                                             sub_account_address,
                                         );
+                                        if data.is_none() {
+                                            continue;
+                                        }
                                         message_tx
                                             .send(Message::text(
                                                 serde_json::to_string(&WsEvent {
@@ -169,7 +173,7 @@ enum Method {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
-enum Channel {
+pub(crate) enum Channel {
     Fills,
     Orders,
     Funding,
@@ -190,18 +194,22 @@ struct WsEvent<T: Serialize> {
     sub_account_id: u8,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-enum AccountEvent {
+pub(crate) enum AccountEvent {
     #[serde(rename_all = "camelCase")]
     Fill {
         side: Side,
         fee: Decimal,
         amount: Decimal,
         price: Decimal,
+        oracle_price: Decimal,
         order_id: u32,
         market_index: u16,
-        #[serde(serialize_with = "ser_market_type")]
+        #[serde(
+            serialize_with = "ser_market_type",
+            deserialize_with = "de_market_type"
+        )]
         market_type: MarketType,
         ts: u64,
         signature: String,
@@ -245,6 +253,7 @@ impl AccountEvent {
         fee: i64,
         base_amount: u64,
         quote_amount: u64,
+        oracle_price: i64,
         order_id: u32,
         ts: u64,
         decimals: u32,
@@ -261,6 +270,7 @@ impl AccountEvent {
                 Side::Sell
             },
             price: price.normalize(),
+            oracle_price: Decimal::new(oracle_price, PRICE_DECIMALS).normalize(),
             fee: Decimal::new(fee, PRICE_DECIMALS).normalize(),
             order_id,
             amount: base_amount.normalize(),
@@ -272,14 +282,14 @@ impl AccountEvent {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 enum Side {
     Buy,
     Sell,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct OrderWithDecimals {
     /// The slot the order was placed
@@ -306,14 +316,20 @@ struct OrderWithDecimals {
     /// The perp/spot market index
     pub market_index: u16,
     /// The type of order
-    #[serde(serialize_with = "ser_order_type")]
+    #[serde(serialize_with = "ser_order_type", deserialize_with = "de_order_type")]
     pub order_type: OrderType,
     /// Whether market is spot or perp
-    #[serde(serialize_with = "ser_market_type")]
+    #[serde(
+        serialize_with = "ser_market_type",
+        deserialize_with = "de_market_type"
+    )]
     pub market_type: MarketType,
     /// User generated order id. Can make it easier to place/cancel orders
     pub user_order_id: u8,
-    #[serde(serialize_with = "ser_position_direction")]
+    #[serde(
+        serialize_with = "ser_position_direction",
+        deserialize_with = "de_position_direction"
+    )]
     pub direction: PositionDirection,
     /// Whether the order is allowed to only reduce position size
     pub reduce_only: bool,
@@ -366,6 +382,24 @@ where
     })
 }
 
+fn de_order_type<'de, D>(deserializer: D) -> Result<OrderType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.as_str() {
+        "limit" => Ok(OrderType::Limit),
+        "market" => Ok(OrderType::Market),
+        "oracle" => Ok(OrderType::Oracle),
+        "triggerLimit" => Ok(OrderType::TriggerLimit),
+        "triggerMarket" => Ok(OrderType::TriggerMarket),
+        _ => Err(serde::de::Error::custom(format!(
+            "unknown order type: {}",
+            s
+        ))),
+    }
+}
+
 fn ser_position_direction<S>(x: &PositionDirection, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -374,6 +408,21 @@ where
         PositionDirection::Long => "buy",
         PositionDirection::Short => "sell",
     })
+}
+
+fn de_position_direction<'de, D>(deserializer: D) -> Result<PositionDirection, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.as_str() {
+        "buy" => Ok(PositionDirection::Long),
+        "sell" => Ok(PositionDirection::Short),
+        _ => Err(serde::de::Error::custom(format!(
+            "unknown position direction: {}",
+            s
+        ))),
+    }
 }
 
 fn ser_market_type<S>(x: &MarketType, s: S) -> Result<S::Ok, S::Error>
@@ -386,26 +435,40 @@ where
     })
 }
 
-// TODO: lookup market decimals...
-/// Map drift-program events into gateway friendly types
-fn map_drift_event(
+fn de_market_type<'de, D>(deserializer: D) -> Result<MarketType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.as_str() {
+        "perp" => Ok(MarketType::Perp),
+        "spot" => Ok(MarketType::Spot),
+        _ => Err(serde::de::Error::custom(format!(
+            "unknown market type: {}",
+            s
+        ))),
+    }
+}
+
+/// Map drift-program events into gateway friendly types for events to the specific UserAccount
+pub(crate) fn map_drift_event_for_account(
     program_data: &ProgramData,
     event: &DriftEvent,
     sub_account_address: Pubkey,
-) -> (Channel, AccountEvent) {
+) -> (Channel, Option<AccountEvent>) {
     match event {
         DriftEvent::OrderFill {
             maker,
             maker_fee,
             maker_order_id,
             maker_side,
-            taker: _,
+            taker,
             taker_fee,
             taker_order_id,
             taker_side,
             base_asset_amount_filled,
             quote_asset_amount_filled,
-            oracle_price: _,
+            oracle_price,
             market_index,
             market_type,
             signature,
@@ -414,31 +477,35 @@ fn map_drift_event(
             let decimals =
                 get_market_decimals(program_data, Market::new(*market_index, *market_type));
             let fill = if *maker == Some(sub_account_address) {
-                AccountEvent::fill(
+                Some(AccountEvent::fill(
                     maker_side.unwrap(),
                     *maker_fee,
                     *base_asset_amount_filled,
                     *quote_asset_amount_filled,
+                    *oracle_price,
                     *maker_order_id,
                     *ts,
                     decimals,
                     signature,
                     *market_index,
                     *market_type,
-                )
-            } else {
-                AccountEvent::fill(
+                ))
+            } else if *taker == Some(sub_account_address) {
+                Some(AccountEvent::fill(
                     taker_side.unwrap(),
                     (*taker_fee) as i64,
                     *base_asset_amount_filled,
                     *quote_asset_amount_filled,
+                    *oracle_price,
                     *taker_order_id,
                     *ts,
                     decimals,
                     signature,
                     *market_index,
                     *market_type,
-                )
+                ))
+            } else {
+                None
             };
 
             (Channel::Fills, fill)
@@ -458,11 +525,11 @@ fn map_drift_event(
             };
             (
                 Channel::Orders,
-                AccountEvent::OrderCancel {
+                Some(AccountEvent::OrderCancel {
                     order_id: *order_id,
                     ts: *ts,
                     signature: signature.to_string(),
-                },
+                }),
             )
         }
         DriftEvent::OrderCancelMissing {
@@ -471,11 +538,11 @@ fn map_drift_event(
             signature,
         } => (
             Channel::Orders,
-            AccountEvent::OrderCancelMissing {
+            Some(AccountEvent::OrderCancelMissing {
                 user_order_id: *user_order_id,
                 order_id: *order_id,
                 signature: signature.to_string(),
-            },
+            }),
         ),
         DriftEvent::OrderExpire {
             order_id,
@@ -485,12 +552,12 @@ fn map_drift_event(
             ..
         } => (
             Channel::Orders,
-            AccountEvent::OrderExpire {
+            Some(AccountEvent::OrderExpire {
                 order_id: *order_id,
                 fee: Decimal::new((*fee as i64).neg(), PRICE_DECIMALS),
                 ts: *ts,
                 signature: signature.to_string(),
-            },
+            }),
         ),
         DriftEvent::OrderCreate {
             order,
@@ -504,11 +571,11 @@ fn map_drift_event(
             );
             (
                 Channel::Orders,
-                AccountEvent::OrderCreate {
+                Some(AccountEvent::OrderCreate {
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
                     signature: signature.to_string(),
-                },
+                }),
             )
         }
         DriftEvent::FundingPayment {
@@ -518,11 +585,154 @@ fn map_drift_event(
             ..
         } => (
             Channel::Funding,
-            AccountEvent::FundingPayment {
+            Some(AccountEvent::FundingPayment {
                 amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
                 market_index: *market_index,
                 ts: *ts,
-            },
+            }),
+        ),
+    }
+}
+
+/// Map drift-program events into gateway friendly types. Includes all events involved, not only
+/// those pertaining to a specific UserAccount
+pub(crate) fn map_drift_events(
+    program_data: &ProgramData,
+    event: &DriftEvent,
+) -> (Channel, Vec<AccountEvent>) {
+    match event {
+        DriftEvent::OrderFill {
+            maker: _,
+            maker_fee,
+            maker_order_id,
+            maker_side,
+            taker: _,
+            taker_fee,
+            taker_order_id,
+            taker_side,
+            base_asset_amount_filled,
+            quote_asset_amount_filled,
+            oracle_price,
+            market_index,
+            market_type,
+            signature,
+            ts,
+        } => {
+            let decimals =
+                get_market_decimals(program_data, Market::new(*market_index, *market_type));
+
+            (
+                Channel::Fills,
+                vec![
+                    AccountEvent::fill(
+                        maker_side.unwrap(),
+                        *maker_fee,
+                        *base_asset_amount_filled,
+                        *quote_asset_amount_filled,
+                        *oracle_price,
+                        *maker_order_id,
+                        *ts,
+                        decimals,
+                        signature,
+                        *market_index,
+                        *market_type,
+                    ),
+                    AccountEvent::fill(
+                        taker_side.unwrap(),
+                        *taker_fee as i64,
+                        *base_asset_amount_filled,
+                        *quote_asset_amount_filled,
+                        *oracle_price,
+                        *taker_order_id,
+                        *ts,
+                        decimals,
+                        signature,
+                        *market_index,
+                        *market_type,
+                    ),
+                ],
+            )
+        }
+        DriftEvent::OrderCancel {
+            taker: _,
+            maker,
+            taker_order_id,
+            maker_order_id,
+            signature,
+            ts,
+        } => {
+            let order_id = if maker.is_some() {
+                maker_order_id
+            } else {
+                taker_order_id
+            };
+            (
+                Channel::Orders,
+                vec![AccountEvent::OrderCancel {
+                    order_id: *order_id,
+                    ts: *ts,
+                    signature: signature.to_string(),
+                }],
+            )
+        }
+        DriftEvent::OrderCancelMissing {
+            order_id,
+            user_order_id,
+            signature,
+        } => (
+            Channel::Orders,
+            vec![AccountEvent::OrderCancelMissing {
+                user_order_id: *user_order_id,
+                order_id: *order_id,
+                signature: signature.to_string(),
+            }],
+        ),
+        DriftEvent::OrderExpire {
+            order_id,
+            fee,
+            ts,
+            signature,
+            ..
+        } => (
+            Channel::Orders,
+            vec![AccountEvent::OrderExpire {
+                order_id: *order_id,
+                fee: Decimal::new((*fee as i64).neg(), PRICE_DECIMALS),
+                ts: *ts,
+                signature: signature.to_string(),
+            }],
+        ),
+        DriftEvent::OrderCreate {
+            order,
+            ts,
+            signature,
+            ..
+        } => {
+            let decimals = get_market_decimals(
+                program_data,
+                Market::new(order.market_index, order.market_type),
+            );
+            (
+                Channel::Orders,
+                vec![AccountEvent::OrderCreate {
+                    order: OrderWithDecimals::from_order(*order, decimals),
+                    ts: *ts,
+                    signature: signature.to_string(),
+                }],
+            )
+        }
+        DriftEvent::FundingPayment {
+            amount,
+            market_index,
+            ts,
+            ..
+        } => (
+            Channel::Funding,
+            vec![AccountEvent::FundingPayment {
+                amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
+                market_index: *market_index,
+                ts: *ts,
+            }],
         ),
     }
 }

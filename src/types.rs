@@ -2,6 +2,8 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
+use std::io::Empty;
+
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
@@ -12,6 +14,8 @@ use drift_sdk::{
 };
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::websocket::AccountEvent;
 
 /// decimal places in price values
 pub const PRICE_DECIMALS: u32 = PRICE_PRECISION.ilog10();
@@ -479,6 +483,23 @@ pub struct TxResponse {
 impl TxResponse {
     pub fn new(tx_signature: String) -> Self {
         Self { tx: tx_signature }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TxEventsResponse {
+    events: Vec<AccountEvent>,
+}
+
+impl TxEventsResponse {
+    pub fn new(events: Vec<AccountEvent>) -> Self {
+        Self { events }
+    }
+}
+
+impl Default for TxEventsResponse {
+    fn default() -> Self {
+        Self { events: Vec::new() }
     }
 }
 

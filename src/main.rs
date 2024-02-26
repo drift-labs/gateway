@@ -26,7 +26,7 @@ pub const LOG_TARGET: &str = "gateway";
 #[derive(serde::Deserialize)]
 struct Args {
     #[serde(default, rename = "subAccountId")]
-    sub_account_id: u16,
+    sub_account_id: Option<u16>,
 }
 
 #[get("/markets")]
@@ -164,6 +164,20 @@ async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
     handle_result(controller.get_sol_balance().await)
 }
 
+#[get("/transactionEvent/{tx_sig}")]
+async fn get_tx_events(
+    controller: web::Data<AppState>,
+    path: web::Path<String>,
+    args: web::Query<Args>,
+) -> impl Responder {
+    let tx_sig = path.into_inner();
+    handle_result(
+        controller
+            .get_tx_events_for_subaccount_id(tx_sig.as_str(), args.sub_account_id)
+            .await,
+    )
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -193,13 +207,13 @@ async fn main() -> std::io::Result<()> {
         config.dev,
         wallet,
         Some((state_commitment, tx_commitment)),
+        Some(config.default_sub_account_id),
     )
     .await;
 
     info!(
         target: LOG_TARGET,
-        "🏛️ gateway listening at http://{}:{}",
-        config.host, config.port
+        "🏛️ gateway listening at http://{}:{}", config.host, config.port
     );
 
     if delegate.is_some() {
@@ -246,7 +260,8 @@ async fn main() -> std::io::Result<()> {
                     .service(get_orderbook)
                     .service(cancel_and_place_orders)
                     .service(get_sol_balance)
-                    .service(get_positions_extended),
+                    .service(get_positions_extended)
+                    .service(get_tx_events),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
@@ -282,6 +297,14 @@ fn handle_result<T: std::fmt::Debug>(
                 {
                     "code": 400,
                     "reason": reason,
+                }
+            )))
+        }
+        Err(ControllerError::TxNotFound { tx_sig }) => {
+            Either::Left(HttpResponse::NotFound().json(json!(
+                {
+                    "code": 404,
+                    "reason": format!("tx not found: {}", tx_sig),
                 }
             )))
         }
@@ -330,6 +353,9 @@ struct GatewayConfig {
     /// solana commitment level to use for state updates (default: confirmed)
     #[argh(option, default = "String::from(\"confirmed\")")]
     commitment: String,
+    /// default sub_account_id to use (default: 0)
+    #[argh(option, default = "0")]
+    default_sub_account_id: u16,
     #[argh(switch)]
     /// enable debug logging
     verbose: bool,
@@ -353,14 +379,18 @@ mod tests {
             .to_string()
     }
 
-    async fn setup_controller() -> AppState {
-        let wallet = create_wallet(Some(get_seed()), None, None);
-        AppState::new(TEST_ENDPOINT, true, wallet, None).await
+    async fn setup_controller(emulate: Option<Pubkey>) -> AppState {
+        let wallet = if emulate.is_none() {
+            create_wallet(Some(get_seed()), None, None)
+        } else {
+            create_wallet(None, emulate, None)
+        };
+        AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
     }
 
     #[actix_web::test]
     async fn get_orders_works() {
-        let controller = setup_controller().await;
+        let controller = setup_controller(None).await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
@@ -378,7 +408,7 @@ mod tests {
 
     #[actix_web::test]
     async fn get_positions_works() {
-        let controller = setup_controller().await;
+        let controller = setup_controller(None).await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
@@ -391,12 +421,12 @@ mod tests {
             .to_request();
 
         let resp = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
+        assert!(resp.status().is_success(), "{:?}", resp.into_body());
     }
 
     #[actix_web::test]
     async fn get_orderbook_works() {
-        let controller = setup_controller().await;
+        let controller = setup_controller(None).await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
@@ -417,7 +447,7 @@ mod tests {
 
     #[actix_web::test]
     async fn get_markets_works() {
-        let controller = setup_controller().await;
+        let controller = setup_controller(None).await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
@@ -435,7 +465,7 @@ mod tests {
 
     #[actix_web::test]
     async fn get_sol_balance_works() {
-        let controller = setup_controller().await;
+        let controller = setup_controller(None).await;
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(controller))
@@ -449,5 +479,105 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn get_tx_events_works() {
+        let controller = setup_controller(Some(
+            Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
+        ))
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_tx_events),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5?subAccountId=0")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+
+        let body_bytes = test::read_body(resp).await;
+        let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let expect_body = json!({
+            "events": [
+                {
+                    "fill": {
+                        "side": "buy",
+                        "fee": "0.129744",
+                        "amount": "5",
+                        "price": "103.7945822",
+                        "oraclePrice": "102.386992",
+                        "orderId": 436,
+                        "marketIndex": 0,
+                        "marketType": "perp",
+                        "ts": 1708684880,
+                        "signature": "5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5"
+                    }
+                }
+            ]
+        });
+        assert_eq!(events, expect_body, "incorrect resp body");
+    }
+
+    #[actix_web::test]
+    async fn get_tx_events_works_for_wrong_subaccount() {
+        let controller = setup_controller(Some(
+            Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
+        ))
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_tx_events),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5?subAccountId=1")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+
+        let body_bytes = test::read_body(resp).await;
+        let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let expect_body = json!({
+            "events": []
+        });
+        assert_eq!(events, expect_body, "incorrect resp body");
+    }
+
+    #[actix_web::test]
+    async fn get_tx_events_doesnt_exit() {
+        let controller = setup_controller(Some(
+            Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
+        ))
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_tx_events),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/transactionEvent/4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms?subAccountId=1")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_client_error());
+
+        let body_bytes = test::read_body(resp).await;
+        let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let expect_body = json!({
+            "code": 404,
+            "reason": "tx not found: 4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms"
+        });
+        assert_eq!(events, expect_body, "incorrect resp body");
     }
 }
