@@ -13,11 +13,8 @@ use drift_sdk::{
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use rust_decimal::Decimal;
-use solana_client::{
-    client_error::{ClientError, ClientErrorKind},
-    rpc_config::RpcTransactionConfig,
-};
-use solana_sdk::{account::Account, signature::Signature};
+use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
+use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -30,7 +27,7 @@ use crate::{
         PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
         TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
-    websocket::{map_drift_event_for_account, AccountEvent},
+    websocket::map_drift_event_for_account,
     LOG_TARGET,
 };
 
@@ -73,6 +70,11 @@ impl AppState {
     pub fn default_sub_account(&self) -> Pubkey {
         self.wallet.sub_account(self.default_subaccount_id)
     }
+    pub fn resolve_sub_account(&self, sub_account_id: Option<u16>) -> Pubkey {
+        self.wallet
+            .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
+    }
+
     pub async fn new(
         endpoint: &str,
         devnet: bool,
@@ -134,9 +136,7 @@ impl AppState {
         req: CancelOrdersRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -158,10 +158,10 @@ impl AppState {
         req: Option<GetPositionsRequest>,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
-        let (all_spot, all_perp) = self.client.all_positions(&sub_account).await?;
+        let (all_spot, all_perp) = self
+            .client
+            .all_positions(&self.resolve_sub_account(sub_account_id))
+            .await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
         let mut filtered_spot_positions = Vec::<SpotPosition>::with_capacity(all_spot.len());
@@ -207,9 +207,7 @@ impl AppState {
         sub_account_id: Option<u16>,
         market: Market,
     ) -> GatewayResult<PerpPosition> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         if let Some(perp_position) = self
             .client
             .perp_position(&sub_account, market.market_index)
@@ -241,9 +239,7 @@ impl AppState {
         req: Option<GetOrdersRequest>,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<GetOrdersResponse> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         let orders = self.client.all_orders(&sub_account).await?;
         Ok(GetOrdersResponse {
             orders: orders
@@ -291,9 +287,7 @@ impl AppState {
             })
             .collect();
 
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -320,9 +314,7 @@ impl AppState {
         req: PlaceOrdersRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -354,9 +346,7 @@ impl AppState {
         req: ModifyOrdersRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = sub_account_id
-            .map(|s| self.wallet.sub_account(s))
-            .unwrap_or(self.default_sub_account());
+        let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -384,12 +374,10 @@ impl AppState {
         tx_sig: &str,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<TxEventsResponse> {
-        let signature = Signature::from_str(&tx_sig)
-            .map_err(|err| {
-                warn!(target: LOG_TARGET, "failed to parse transaction signature: {err:?}");
-                err
-            })
-            .unwrap();
+        let signature = Signature::from_str(&tx_sig).map_err(|err| {
+            warn!(target: LOG_TARGET, "failed to parse transaction signature: {err:?}");
+            ControllerError::BadRequest(format!("failed to parse transaction signature: {err:?}"))
+        })?;
 
         match self
             .client
@@ -409,14 +397,11 @@ impl AppState {
             .await
         {
             Ok(tx) => {
-                println!("aaaaa tx: {:#?}", tx);
                 let mut events = Vec::new();
                 if let Some(meta) = tx.transaction.meta {
                     match meta.log_messages {
                         OptionSerializer::Some(logs) => {
-                            let sub_account = sub_account_id
-                                .map(|s| self.wallet.sub_account(s))
-                                .unwrap_or(self.default_sub_account());
+                            let sub_account = self.resolve_sub_account(sub_account_id);
                             for log in logs {
                                 if let Some(evt) = try_parse_log(log.as_str(), tx_sig) {
                                     let (_, gw_event) = map_drift_event_for_account(
@@ -424,10 +409,10 @@ impl AppState {
                                         &evt,
                                         sub_account,
                                     );
-                                    if let AccountEvent::Empty = gw_event {
+                                    if gw_event.is_none() {
                                         continue;
                                     }
-                                    events.push(gw_event);
+                                    events.push(gw_event.unwrap());
                                 }
                             }
                         }

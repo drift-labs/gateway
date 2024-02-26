@@ -110,6 +110,9 @@ async fn accept_connection(
                                             update,
                                             sub_account_address,
                                         );
+                                        if data.is_none() {
+                                            continue;
+                                        }
                                         message_tx
                                             .send(Message::text(
                                                 serde_json::to_string(&WsEvent {
@@ -242,8 +245,6 @@ pub(crate) enum AccountEvent {
         market_index: u16,
         ts: u64,
     },
-    #[serde(skip_deserializing)]
-    Empty,
 }
 
 impl AccountEvent {
@@ -454,7 +455,7 @@ pub(crate) fn map_drift_event_for_account(
     program_data: &ProgramData,
     event: &DriftEvent,
     sub_account_address: Pubkey,
-) -> (Channel, AccountEvent) {
+) -> (Channel, Option<AccountEvent>) {
     match event {
         DriftEvent::OrderFill {
             maker,
@@ -476,7 +477,7 @@ pub(crate) fn map_drift_event_for_account(
             let decimals =
                 get_market_decimals(program_data, Market::new(*market_index, *market_type));
             let fill = if *maker == Some(sub_account_address) {
-                AccountEvent::fill(
+                Some(AccountEvent::fill(
                     maker_side.unwrap(),
                     *maker_fee,
                     *base_asset_amount_filled,
@@ -488,9 +489,9 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *market_index,
                     *market_type,
-                )
+                ))
             } else if *taker == Some(sub_account_address) {
-                AccountEvent::fill(
+                Some(AccountEvent::fill(
                     taker_side.unwrap(),
                     (*taker_fee) as i64,
                     *base_asset_amount_filled,
@@ -502,9 +503,9 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *market_index,
                     *market_type,
-                )
+                ))
             } else {
-                AccountEvent::Empty {}
+                None
             };
 
             (Channel::Fills, fill)
@@ -524,11 +525,11 @@ pub(crate) fn map_drift_event_for_account(
             };
             (
                 Channel::Orders,
-                AccountEvent::OrderCancel {
+                Some(AccountEvent::OrderCancel {
                     order_id: *order_id,
                     ts: *ts,
                     signature: signature.to_string(),
-                },
+                }),
             )
         }
         DriftEvent::OrderCancelMissing {
@@ -537,11 +538,11 @@ pub(crate) fn map_drift_event_for_account(
             signature,
         } => (
             Channel::Orders,
-            AccountEvent::OrderCancelMissing {
+            Some(AccountEvent::OrderCancelMissing {
                 user_order_id: *user_order_id,
                 order_id: *order_id,
                 signature: signature.to_string(),
-            },
+            }),
         ),
         DriftEvent::OrderExpire {
             order_id,
@@ -551,12 +552,12 @@ pub(crate) fn map_drift_event_for_account(
             ..
         } => (
             Channel::Orders,
-            AccountEvent::OrderExpire {
+            Some(AccountEvent::OrderExpire {
                 order_id: *order_id,
                 fee: Decimal::new((*fee as i64).neg(), PRICE_DECIMALS),
                 ts: *ts,
                 signature: signature.to_string(),
-            },
+            }),
         ),
         DriftEvent::OrderCreate {
             order,
@@ -570,11 +571,11 @@ pub(crate) fn map_drift_event_for_account(
             );
             (
                 Channel::Orders,
-                AccountEvent::OrderCreate {
+                Some(AccountEvent::OrderCreate {
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
                     signature: signature.to_string(),
-                },
+                }),
             )
         }
         DriftEvent::FundingPayment {
@@ -584,11 +585,11 @@ pub(crate) fn map_drift_event_for_account(
             ..
         } => (
             Channel::Funding,
-            AccountEvent::FundingPayment {
+            Some(AccountEvent::FundingPayment {
                 amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
                 market_index: *market_index,
                 ts: *ts,
-            },
+            }),
         ),
     }
 }
