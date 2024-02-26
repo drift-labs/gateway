@@ -2,8 +2,6 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
-use std::io::Empty;
-
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
