@@ -2,6 +2,29 @@
 
 Self hosted API gateway to easily interact with Drift V2 Protocol
 
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+3. [Usage](#usage)
+    - [Delegated Signing Mode](#delegated-signing-mode)
+    - [Sub-account Switching](#sub-account-switching)
+4. [API Examples](#api-examples)
+    - [HTTP API](#http-api)
+      - [`GET` Market Info](#get-market-info)
+      - [`GET` Orderbook](#get-orderbook)
+      - [`GET` Orders](#get-orders)
+      - [`GET` Positions](#get-positions)
+      - [`GET` Perp Position Info](#get-position-info-perps-only)
+      - [`GET` Transaction Events](#get-transaction-events)
+      - [`GET` SOL Balance](#get-sol-balance)
+      - [`POST` Place Orders](#place-orders)
+      - [`PATCH` Modify Orders](#modify-orders)
+      - [`DELETE` Cancel Orders](#cancel-orders)
+      - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
+    - [Websocket API](#websocket-api)
+      - [Subscribing](#subscribing)
+      - [Event Payloads](#event-payloads)
+
 ## Build & Run
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
@@ -50,9 +73,26 @@ Options:
   --verbose                       enable debug logging
 ```
 
+### Delegated Signing Mode
+Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
+
+In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY` (i.e delegate key).
+
+Use the drift UI or Ts/Python SDK to assign a delegator key.
+see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
+
+### Sub-account Switching
+By default the gateway will perform all account operations on sub-account 0, you can overwrite this default by setting the `--default-sub-account-id` flag on startup.
+
+A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
+
+e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
+
 ## API Examples
 
 Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
+
+###  HTTP API
 
 ### Get Market Info
 gets info on all available spot & perp markets
@@ -285,6 +325,11 @@ A response for a transaction that was found, but doesn't contain any events for 
 }
 ```
 
+### Get SOL balance
+Return the SOL balance of the transaction signer
+```bash
+$ curl localhost:8080/v2/balance
+```
 
 ### Place Orders
 
@@ -399,16 +444,10 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 }'
 ```
 
-### Get SOL balance
-Return the SOL balance of the transaction signer
-```bash
-$ curl localhost:8080/v2/balance
-```
-
-## WebSockets
+## WebSocket API
 Websocket API is provided for live event streams by default at port `127.0.0.1:1337`
 
-## Subscribing
+### Subscribing
 Subscribe to order and fills updates by a `subAccountId` (`0` is the drift default)
 ```ts
 {"method":"subscribe", "subAccountId":0}
@@ -416,7 +455,7 @@ Subscribe to order and fills updates by a `subAccountId` (`0` is the drift defau
 {"method":"unsubscribe", "subAccountId":0}
 ```
 
-## Event Payloads
+### Event Payloads
 
 event payloads can be distinguished by "channel" field and the "data" payload is keyed by the event type
 
@@ -427,7 +466,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
         "orderCancel": {
             "orderId": 156,
             "ts": 1704777451,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+            "txIdx":15
         }
     },
     "channel": "orders",
@@ -480,7 +520,8 @@ event payloads can be distinguished by "channel" field and the "data" payload is
                 "auctionDuration": 0
             },
             "ts": 1704777347,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+            "txIdx": 31,
         }
     },
     "channel": "orders",
@@ -496,19 +537,27 @@ event payloads can be distinguished by "channel" field and the "data" payload is
 {
     "data": {
         "fill": {
-            "side": "buy",
-            "fee": "0.002581",
-            "amount": "0.1",
-            "price": "103.22087",
-            "marketIndex": 0,
+            "side": "sell",
+            "fee": "-0.100549",
+            "amount": "0.0326",
+            "price": "61687",
+            "oraclePrice": "61335.477737",
+            "orderId": 11198929,
+            "marketIndex": 1,
             "marketType": "perp",
-            "orderId": 157,
-            "ts": 1704777355,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+            "ts": 1709248100,
+            "txIdx": 12,
+            "signature": "5xZvkv2Y5nGgpYpitFyzg99AVwqHPwspapjxBFmPygrKWdwPfaBd6Tm3sQEw3k8GsZAd68cJ9cPr89wJ11agWthp",
+            "maker": "B24N44F45nq4Sk2gVQqtWG3bfXW2FJKZrVqhhWcxJNv3",
+            "makerOrderId": 11198929,
+            "makerFee": "-0.100549",
+            "taker": "Fii4Aio6rGoa8BDH6mR7JfTWA73FA7No1SNauYEWCoVn",
+            "takerOrderId": 40,
+            "takerFee": "0.502750"
         }
     },
     "channel": "fills",
-    "subAccountId": 0
+    "subAccountId": 1
 }
 ```
 
@@ -552,7 +601,9 @@ settled funding payment event for open perp positions
         "fundingPayment": {
             "amount": "0.005558",
             "marketIndex": 0,
-            "ts": 1708664443
+            "ts": 1708664443,
+            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+            "txIdx": 1
         }
     },
     "channel": "funding",
@@ -566,22 +617,6 @@ Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run
 The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
 
 note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
-
-
-## Delegated Signing Mode
-Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
-
-In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY` (i.e delegate key).
-
-Use the drift UI or Ts/Python SDK to assign a delegator key.
-see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
-
-## Sub-account Switching
-By default the gateway will perform all account operations on sub-account 0, you can overwrite this default by setting the `--default-sub-account-id` flag on startup.
-
-A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
-
-e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
 
 ### Errors
 error responses have the following JSON structure:
@@ -609,3 +644,4 @@ The free _api.mainnet-beta.solana.com_RPC cannot be used due to rate-limits on `
 ```rust
 Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(410), ...
 ```
+

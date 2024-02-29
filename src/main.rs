@@ -516,7 +516,14 @@ mod tests {
                         "marketIndex": 0,
                         "marketType": "perp",
                         "ts": 1708684880,
-                        "signature": "5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5"
+                        "signature": "5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5",
+                        "maker": null,
+                        "makerFee": "0.000000",
+                        "makerOrderId": 0,
+                        "taker": "5Fky2PjbdFz3PVnfLLbq3caq5iBdwpEvcmrF3iageLJB",
+                        "takerFee": "0.129744",
+                        "takerOrderId": 436,
+                        "txIdx": 6
                     }
                 }
             ]

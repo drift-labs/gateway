@@ -364,7 +364,10 @@ impl AppState {
     }
 
     pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
-        let book = self.dlob_client.get_l2(req.market.as_market_id()).await?;
+        let book = self
+            .dlob_client
+            .get_l2(req.market.as_market_id(), None)
+            .await?;
         let decimals = get_market_decimals(self.client.program_data(), req.market);
         Ok(OrderbookL2::new(book, decimals))
     }
@@ -402,8 +405,8 @@ impl AppState {
                     match meta.log_messages {
                         OptionSerializer::Some(logs) => {
                             let sub_account = self.resolve_sub_account(sub_account_id);
-                            for log in logs {
-                                if let Some(evt) = try_parse_log(log.as_str(), tx_sig) {
+                            for (tx_idx, log) in logs.iter().enumerate() {
+                                if let Some(evt) = try_parse_log(log.as_str(), tx_sig, tx_idx) {
                                     let (_, gw_event) = map_drift_event_for_account(
                                         self.client.program_data(),
                                         &evt,
