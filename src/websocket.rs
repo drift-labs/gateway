@@ -227,19 +227,31 @@ pub(crate) enum AccountEvent {
         )]
         market_type: MarketType,
         ts: u64,
+
+        /// The index of the event in the transaction
+        tx_idx: usize,
         signature: String,
+
+        maker: Option<String>,
+        maker_order_id: Option<u32>,
+        maker_fee: Option<Decimal>,
+        taker: Option<String>,
+        taker_order_id: Option<u32>,
+        taker_fee: Option<Decimal>,
     },
     #[serde(rename_all = "camelCase")]
     OrderCreate {
         order: OrderWithDecimals,
         ts: u64,
         signature: String,
+        tx_idx: usize,
     },
     #[serde(rename_all = "camelCase")]
     OrderCancel {
         order_id: u32,
         ts: u64,
         signature: String,
+        tx_idx: usize,
     },
     #[serde(rename_all = "camelCase")]
     OrderCancelMissing {
@@ -259,6 +271,8 @@ pub(crate) enum AccountEvent {
         amount: Decimal,
         market_index: u16,
         ts: u64,
+        signature: String,
+        tx_idx: usize,
     },
 }
 
@@ -273,8 +287,15 @@ impl AccountEvent {
         ts: u64,
         decimals: u32,
         signature: &String,
+        tx_idx: usize,
         market_index: u16,
         market_type: MarketType,
+        maker: Option<String>,
+        maker_order_id: Option<u32>,
+        maker_fee: Option<i64>,
+        taker: Option<String>,
+        taker_order_id: Option<u32>,
+        taker_fee: Option<i64>,
     ) -> Self {
         let base_amount = Decimal::new(base_amount as i64, decimals);
         let price = Decimal::new(quote_amount as i64, PRICE_DECIMALS) / base_amount;
@@ -293,6 +314,13 @@ impl AccountEvent {
             signature: signature.to_string(),
             market_index,
             market_type,
+            tx_idx,
+            maker,
+            maker_order_id,
+            maker_fee: maker_fee.map(|x| Decimal::new(x, PRICE_DECIMALS)),
+            taker,
+            taker_order_id,
+            taker_fee: taker_fee.map(|x| Decimal::new(x, PRICE_DECIMALS)),
         }
     }
 }
@@ -487,6 +515,7 @@ pub(crate) fn map_drift_event_for_account(
             market_index,
             market_type,
             signature,
+            tx_idx,
             ts,
         } => {
             let decimals =
@@ -502,8 +531,15 @@ pub(crate) fn map_drift_event_for_account(
                     *ts,
                     decimals,
                     signature,
+                    *tx_idx,
                     *market_index,
                     *market_type,
+                    (*maker).map(|x| x.to_string()),
+                    Some(*maker_order_id),
+                    Some(*maker_fee),
+                    (*taker).map(|x| x.to_string()),
+                    Some(*taker_order_id),
+                    Some(*taker_fee as i64),
                 ))
             } else if *taker == Some(sub_account_address) {
                 Some(AccountEvent::fill(
@@ -516,8 +552,15 @@ pub(crate) fn map_drift_event_for_account(
                     *ts,
                     decimals,
                     signature,
+                    *tx_idx,
                     *market_index,
                     *market_type,
+                    (*maker).map(|x| x.to_string()),
+                    Some(*maker_order_id),
+                    Some(*maker_fee),
+                    (*taker).map(|x| x.to_string()),
+                    Some(*taker_order_id),
+                    Some(*taker_fee as i64),
                 ))
             } else {
                 None
@@ -531,6 +574,7 @@ pub(crate) fn map_drift_event_for_account(
             taker_order_id,
             maker_order_id,
             signature,
+            tx_idx,
             ts,
         } => {
             let order_id = if *maker == Some(sub_account_address) {
@@ -544,6 +588,7 @@ pub(crate) fn map_drift_event_for_account(
                     order_id: *order_id,
                     ts: *ts,
                     signature: signature.to_string(),
+                    tx_idx: *tx_idx,
                 }),
             )
         }
@@ -564,6 +609,7 @@ pub(crate) fn map_drift_event_for_account(
             fee,
             ts,
             signature,
+            tx_idx,
             ..
         } => (
             Channel::Orders,
@@ -578,6 +624,7 @@ pub(crate) fn map_drift_event_for_account(
             order,
             ts,
             signature,
+            tx_idx,
             ..
         } => {
             let decimals = get_market_decimals(
@@ -590,6 +637,7 @@ pub(crate) fn map_drift_event_for_account(
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
                     signature: signature.to_string(),
+                    tx_idx: *tx_idx,
                 }),
             )
         }
@@ -597,6 +645,8 @@ pub(crate) fn map_drift_event_for_account(
             amount,
             market_index,
             ts,
+            tx_idx,
+            signature,
             ..
         } => (
             Channel::Funding,
@@ -604,6 +654,8 @@ pub(crate) fn map_drift_event_for_account(
                 amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
                 market_index: *market_index,
                 ts: *ts,
+                signature: signature.to_string(),
+                tx_idx: *tx_idx,
             }),
         ),
     }
@@ -617,11 +669,11 @@ pub(crate) fn map_drift_events(
 ) -> (Channel, Vec<AccountEvent>) {
     match event {
         DriftEvent::OrderFill {
-            maker: _,
+            maker,
             maker_fee,
             maker_order_id,
             maker_side,
-            taker: _,
+            taker,
             taker_fee,
             taker_order_id,
             taker_side,
@@ -631,6 +683,7 @@ pub(crate) fn map_drift_events(
             market_index,
             market_type,
             signature,
+            tx_idx,
             ts,
         } => {
             let decimals =
@@ -649,8 +702,15 @@ pub(crate) fn map_drift_events(
                         *ts,
                         decimals,
                         signature,
+                        *tx_idx,
                         *market_index,
                         *market_type,
+                        (*maker).map(|x| x.to_string()),
+                        Some(*maker_order_id),
+                        Some(*maker_fee),
+                        (*taker).map(|x| x.to_string()),
+                        Some(*taker_order_id),
+                        Some(*taker_fee as i64),
                     ),
                     AccountEvent::fill(
                         taker_side.unwrap(),
@@ -662,8 +722,15 @@ pub(crate) fn map_drift_events(
                         *ts,
                         decimals,
                         signature,
+                        *tx_idx,
                         *market_index,
                         *market_type,
+                        (*maker).map(|x| x.to_string()),
+                        Some(*maker_order_id),
+                        Some(*maker_fee),
+                        (*taker).map(|x| x.to_string()),
+                        Some(*taker_order_id),
+                        Some(*taker_fee as i64),
                     ),
                 ],
             )
@@ -674,6 +741,7 @@ pub(crate) fn map_drift_events(
             taker_order_id,
             maker_order_id,
             signature,
+            tx_idx,
             ts,
         } => {
             let order_id = if maker.is_some() {
@@ -687,6 +755,7 @@ pub(crate) fn map_drift_events(
                     order_id: *order_id,
                     ts: *ts,
                     signature: signature.to_string(),
+                    tx_idx: *tx_idx,
                 }],
             )
         }
@@ -721,6 +790,7 @@ pub(crate) fn map_drift_events(
             order,
             ts,
             signature,
+            tx_idx,
             ..
         } => {
             let decimals = get_market_decimals(
@@ -733,6 +803,7 @@ pub(crate) fn map_drift_events(
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
                     signature: signature.to_string(),
+                    tx_idx: *tx_idx,
                 }],
             )
         }
@@ -740,6 +811,8 @@ pub(crate) fn map_drift_events(
             amount,
             market_index,
             ts,
+            signature,
+            tx_idx,
             ..
         } => (
             Channel::Funding,
@@ -747,6 +820,8 @@ pub(crate) fn map_drift_events(
                 amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
                 market_index: *market_index,
                 ts: *ts,
+                signature: signature.to_string(),
+                tx_idx: *tx_idx,
             }],
         ),
     }
