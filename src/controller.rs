@@ -3,7 +3,7 @@ use drift_sdk::{
     dlob::DLOBClient,
     event_subscriber::try_parse_log,
     event_subscriber::CommitmentConfig,
-    liquidation::calculate_liquidation_price,
+    liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
@@ -208,23 +208,22 @@ impl AppState {
         market: Market,
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(sub_account_id);
-        if let Some(perp_position) = self
-            .client
-            .perp_position(&sub_account, market.market_index)
-            .await?
-        {
-            let (oracle_price, user) = tokio::join!(
-                self.client.oracle_price(market.as_market_id()),
-                self.client.get_user_account(&sub_account)
-            );
+        let (perp_position, user) = tokio::join!(
+            self.client.perp_position(&sub_account, market.market_index),
+            self.client.get_user_account(&sub_account),
+        );
 
-            let unrealized_pnl = perp_position.get_unrealized_pnl(oracle_price?);
-            let liquidation_price =
-                calculate_liquidation_price(&self.client, &user?, market.market_index).await?;
+        if let Some(perp_position) = perp_position? {
+            let result = calculate_liquidation_price_and_unrealized_pnl(
+                &self.client,
+                &user?,
+                market.market_index,
+            )
+            .await?;
             let mut p: PerpPosition = perp_position.into();
             p.set_extended_info(PerpPositionExtended {
-                liquidation_price: Decimal::new(liquidation_price, PRICE_DECIMALS),
-                unrealized_pnl: Decimal::new(unrealized_pnl.unwrap() as i64, PRICE_DECIMALS),
+                liquidation_price: Decimal::new(result.liquidation_price, PRICE_DECIMALS),
+                unrealized_pnl: Decimal::new(result.unrealized_pnl as i64, PRICE_DECIMALS),
             });
 
             Ok(p)
