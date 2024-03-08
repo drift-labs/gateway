@@ -14,7 +14,7 @@ use serde_json::json;
 use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, Market, ModifyOrdersRequest,
-    PlaceOrdersRequest,
+    PlaceIoCOrderRequest, PlaceOrdersRequest,
 };
 
 mod controller;

@@ -10,15 +10,11 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use jit_proxy::{
-    jit_proxy::jit,
-    jit_proxy_client::{JitIxParams, JitProxyClient},
-    jitter::Jitter,
-};
+use jit_proxy::jit_proxy_client::{JitIxParams, JitProxyClient};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
-use solana_sdk::{info, signature::Signature};
+use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -54,6 +50,7 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
+    pub jit_client: JitProxyClient<RpcAccountProvider>,
     pub client: Arc<DriftClient<RpcAccountProvider>>,
     dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
@@ -106,6 +103,7 @@ impl AppState {
         };
 
         Self {
+            jit_client: JitProxyClient::new(client.clone(), None, None),
             delegated: wallet.is_delegated(),
             wallet,
             client: Arc::new(client),
@@ -349,11 +347,12 @@ impl AppState {
         req: PlaceIoCOrderRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<()> {
-        let jit_client = JitProxyClient::new(self.client, None, None);
         let taker_account_stats = self.client.get_user_stats(&req.taker).await?;
         let taker_account = self.client.get_user_account(&req.taker).await?;
         let referrer_info = ReferrerInfo::get_referrer_info(taker_account_stats);
-        let result = jit_client
+        // TODO: allow sub-account switching
+        let result = self
+            .jit_client
             .jit(JitIxParams::new(
                 req.taker,
                 Wallet::derive_stats_account(&taker_account.authority, &PROGRAM_ID),
