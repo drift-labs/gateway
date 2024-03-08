@@ -11,10 +11,15 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{debug, warn};
+use jit_proxy::{
+    jit_proxy::jit,
+    jit_proxy_client::{JitIxParams, JitProxyClient},
+    jitter::Jitter,
+};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
-use solana_sdk::signature::Signature;
+use solana_sdk::{info, signature::Signature};
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -24,8 +29,8 @@ use crate::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
         GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, PRICE_DECIMALS,
+        PerpPositionExtended, PlaceIoCOrderRequest, PlaceOrdersRequest, SolBalanceResponse,
+        SpotPosition, TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     LOG_TARGET,
@@ -338,6 +343,33 @@ impl AppState {
         .build();
 
         self.send_tx(tx, "place_orders").await
+    }
+
+    pub async fn place_ioc_order(
+        &self,
+        req: PlaceIoCOrderRequest,
+        sub_account_id: Option<u16>,
+    ) -> GatewayResult<()> {
+        let jit_client = JitProxyClient::new(*self.client.clone(), None, None);
+        let result = jit_client
+            .jit(JitIxParams::new(
+                taker_key,
+                taker_stats_key,
+                taker,
+                taker_order_id,
+                max_position,
+                min_position,
+                bid,
+                ask,
+                price_type,
+                referrer_info,
+                post_only,
+            ))
+            .await;
+
+        info!("{result:?}");
+
+        Ok(())
     }
 
     pub async fn modify_orders(

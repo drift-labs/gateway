@@ -9,6 +9,7 @@ use drift_sdk::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
     },
+    Pubkey,
 };
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
@@ -506,6 +507,13 @@ pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
     pub modify: ModifyOrdersRequest,
     pub place: PlaceOrdersRequest,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaceIoCOrderRequest {
+    taker: Pubkey,
+    taker_order_id: u32,
 }
 
 /// Serialize DLOB with human readable numeric values

@@ -119,6 +119,21 @@ async fn cancel_and_place_orders(
     }
 }
 
+#[post("/orders/ioc")]
+async fn place_ioc_order(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    args: web::Query<Args>,
+) -> impl Responder {
+    match serde_json::from_slice::<'_, PlaceIoCOrderRequest>(body.as_ref()) {
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(controller.place_ioc_order(req, args.sub_account_id).await)
+        }
+        Err(err) => handle_deser_error(err),
+    }
+}
+
 #[get("/positions")]
 async fn get_positions(
     controller: web::Data<AppState>,
