@@ -512,8 +512,12 @@ pub struct CancelAndPlaceRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaceIoCOrderRequest {
-    taker: Pubkey,
-    taker_order_id: u32,
+    pub taker: Pubkey,
+    pub taker_order_id: u32,
+    pub bid: Option<Decimal>,
+    pub ask: Option<Decimal>,
+    pub min_position: Option<Decimal>,
+    pub max_position: Option<Decimal>,
 }
 
 /// Serialize DLOB with human readable numeric values

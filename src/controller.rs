@@ -1,12 +1,11 @@
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION},
+    constants::{ProgramData, BASE_PRECISION, PROGRAM_ID},
     dlob::DLOBClient,
-    event_subscriber::try_parse_log,
-    event_subscriber::CommitmentConfig,
+    event_subscriber::{try_parse_log, CommitmentConfig},
     liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
-        Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
-        SdkResult, VersionedMessage,
+        Context, MarketId, MarketType, ModifyOrderParams, ReferrerInfo, RpcSendTransactionConfig,
+        SdkError, SdkResult, VersionedMessage,
     },
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
@@ -350,20 +349,31 @@ impl AppState {
         req: PlaceIoCOrderRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<()> {
-        let jit_client = JitProxyClient::new(*self.client.clone(), None, None);
+        let jit_client = JitProxyClient::new(self.client, None, None);
+        let taker_account_stats = self.client.get_user_stats(&req.taker).await?;
+        let taker_account = self.client.get_user_account(&req.taker).await?;
+        let referrer_info = ReferrerInfo::get_referrer_info(taker_account_stats);
         let result = jit_client
             .jit(JitIxParams::new(
-                taker_key,
-                taker_stats_key,
-                taker,
-                taker_order_id,
-                max_position,
-                min_position,
-                bid,
-                ask,
-                price_type,
+                req.taker,
+                Wallet::derive_stats_account(&taker_account.authority, &PROGRAM_ID),
+                taker_account,
+                req.taker_order_id,
+                req.max_position
+                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                    .unwrap_or_default(),
+                req.min_position
+                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                    .unwrap_or_default(),
+                req.bid
+                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                    .unwrap_or_default(),
+                req.ask
+                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                    .unwrap_or_default(),
+                None, // price type
                 referrer_info,
-                post_only,
+                None,
             ))
             .await;
 
