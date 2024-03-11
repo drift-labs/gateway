@@ -3,27 +3,29 @@
 Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ## Table of Contents
+
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [Usage](#usage)
-    - [Delegated Signing Mode](#delegated-signing-mode)
-    - [Sub-account Switching](#sub-account-switching)
+   - [Delegated Signing Mode](#delegated-signing-mode)
+   - [Sub-account Switching](#sub-account-switching)
 4. [API Examples](#api-examples)
-    - [HTTP API](#http-api)
-      - [`GET` Market Info](#get-market-info)
-      - [`GET` Orderbook](#get-orderbook)
-      - [`GET` Orders](#get-orders)
-      - [`GET` Positions](#get-positions)
-      - [`GET` Perp Position Info](#get-position-info-perps-only)
-      - [`GET` Transaction Events](#get-transaction-events)
-      - [`GET` SOL Balance](#get-sol-balance)
-      - [`POST` Place Orders](#place-orders)
-      - [`PATCH` Modify Orders](#modify-orders)
-      - [`DELETE` Cancel Orders](#cancel-orders)
-      - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
-    - [Websocket API](#websocket-api)
-      - [Subscribing](#subscribing)
-      - [Event Payloads](#event-payloads)
+   - [HTTP API](#http-api)
+     - [`GET` Market Info](#get-market-info)
+     - [`GET` Orderbook](#get-orderbook)
+     - [`GET` Orders](#get-orders)
+     - [`GET` Positions](#get-positions)
+     - [`GET` Perp Position Info](#get-position-info-perps-only)
+     - [`GET` Transaction Events](#get-transaction-events)
+     - [`GET` SOL Balance](#get-sol-balance)
+     - [`POST` Place Orders](#place-orders)
+     - [`POST` IoC/JIT Order](#ioc-order)
+     - [`PATCH` Modify Orders](#modify-orders)
+     - [`DELETE` Cancel Orders](#cancel-orders)
+     - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
+   - [Websocket API](#websocket-api)
+     - [Subscribing](#subscribing)
+     - [Event Payloads](#event-payloads)
 
 ## Build & Run
 
@@ -46,12 +48,14 @@ drift-gateway https://rpc-provider.example.com
 ```
 
 with docker
+
 ```bash
 docker build -f Dockerfile . -t drift-gateway
 docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
 ```
 
 ## Usage
+
 ```bash
 Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
 
@@ -74,6 +78,7 @@ Options:
 ```
 
 ### Delegated Signing Mode
+
 Passing the `--delegate <DELEGATOR_PUBKEY>` flag will instruct the gateway to run in delegated signing mode.
 
 In this mode, the gateway will act for `DELEGATOR_PUBKEY` and sub-accounts while signing with the key provided via `DRIFT_GATEWAY_KEY` (i.e delegate key).
@@ -82,6 +87,7 @@ Use the drift UI or Ts/Python SDK to assign a delegator key.
 see [Delegated Accounts](https://docs.drift.trade/delegated-accounts) for more information.
 
 ### Sub-account Switching
+
 By default the gateway will perform all account operations on sub-account 0, you can overwrite this default by setting the `--default-sub-account-id` flag on startup.
 
 A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
@@ -92,17 +98,20 @@ e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the walle
 
 Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
 
-###  HTTP API
+### HTTP API
 
 ### Get Market Info
+
 gets info on all available spot & perp markets
 
 NB: spot marketIndex `0`/USDC is non-tradable
+
 ```bash
 $ curl localhost:8080/v2/markets
 ```
 
 **Response**
+
 - `priceStep` smallest order price increment for the market
 - `amountStep` smallest order amount increment for the market
 - `minOrderSize` minimum order amount for the market
@@ -116,7 +125,7 @@ $ curl localhost:8080/v2/markets
       "priceStep": "0.0001",
       "amountStep": "0.1",
       "minOrderSize": "0.1"
-    },
+    }
     // ...
   ],
   "perp": [
@@ -126,13 +135,14 @@ $ curl localhost:8080/v2/markets
       "priceStep": "0.0001",
       "amountStep": "0.01",
       "minOrderSize": "0.01"
-    },
+    }
     // ...
   ]
 }
 ```
 
 ### Get Orderbook
+
 gets a full snapshot of the current orderbook for a given market
 
 - `marketType` - "spot" or "perp
@@ -144,6 +154,7 @@ $ curl localhost:8080/v2/orderbook -X GET \
 ```
 
 **Response**
+
 ```json
 {
   "slot": 266118166,
@@ -175,17 +186,22 @@ $ curl localhost:8080/v2/orderbook -X GET \
 ```
 
 to stream orderbooks via websocket public DLOB servers are available at:
+
 - devnet: `wss://master.dlob.drift.trade/ws`
 - mainnet: `wss://dlob.drift.trade/ws`
 
 see https://github.com/drift-labs/dlob-server/blob/master/example/wsClient.ts for usage example
 
 ### Get Orders
+
 get all orders
+
 ```bash
 $ curl localhost:8080/v2/orders
 ```
+
 get orders by market
+
 ```bash
 $ curl -X GET \
   -H 'content-type: application/json' \
@@ -194,6 +210,7 @@ $ curl -X GET \
 ```
 
 **Response**
+
 ```json
 {
   "orders": [
@@ -227,11 +244,15 @@ $ curl -X GET \
 ```
 
 ### Get Positions
+
 get all positions
+
 ```bash
 $ curl localhost:8080/v2/positions
 ```
+
 get positions by market
+
 ```bash
 $ curl -X GET \
   -H 'content-type: application/json' \
@@ -240,6 +261,7 @@ localhost:8080/v2/positions
 ```
 
 **Response**
+
 ```json
 {
   "spot": [
@@ -259,7 +281,9 @@ localhost:8080/v2/positions
 ```
 
 ### Get Position Info (perps only)
+
 get extended position info for perps positions
+
 ```bash
 # query info for perp market 0
 $ curl localhost:8080/v2/positionInfo/0
@@ -268,6 +292,7 @@ $ curl localhost:8080/v2/positionInfo/0
 note: unrealized PnL is based on the oracle price at time of query
 
 **Response**
+
 ```json
 {
   "amount": "-3.3",
@@ -279,9 +304,9 @@ note: unrealized PnL is based on the oracle price at time of query
 ```
 
 ### Get Transaction Events
+
 gets the transaction and parses events relevant to the provided user `subAccountId` (default will be used otherwise). Only events relevant to
 the provided user will be returned.
-
 
 ```bash
 # get events from tx hash 5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5 for my subAccountId 0
@@ -291,6 +316,7 @@ $ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkw
 **Response**
 
 A response with a fill belonging to sub-account 0
+
 ```json
 {
   "events": [
@@ -313,6 +339,7 @@ A response with a fill belonging to sub-account 0
 ```
 
 A response for a transaction not found. You should consider this transaction as dropped after around 5 seconds.
+
 ```json
 {
   "code": 404,
@@ -321,6 +348,7 @@ A response for a transaction not found. You should consider this transaction as 
 ```
 
 A response for a transaction that was found, but doesn't contain any events for the user
+
 ```json
 {
   "events": []
@@ -328,7 +356,9 @@ A response for a transaction that was found, but doesn't contain any events for 
 ```
 
 ### Get SOL balance
+
 Return the SOL balance of the transaction signer
+
 ```bash
 $ curl localhost:8080/v2/balance
 ```
@@ -339,8 +369,9 @@ $ curl localhost:8080/v2/balance
 - `userOrderId` is a uint in the range 1 <= x <= 255 which can be assigned by the client to help distinguish orders
 - `orderType` only "limit" and "market" options are fully supported by the gateway
 - `oraclePriceOffset` supported on `"limit"` order types.
-It creates a limit order with a floating price relative to the market oracle price. when supplied the `price` field is ignored.
+  It creates a limit order with a floating price relative to the market oracle price. when supplied the `price` field is ignored.
 - `maxTs` order expiration timestamp. NB: expired orders can incur protocol costs
+
 ```bash
 $ curl localhost:8080/v2/orders -X POST \
 -H 'content-type: application/json' \
@@ -368,13 +399,40 @@ $ curl localhost:8080/v2/orders -X POST \
     }]
 }'
 ```
+
 Returns solana tx signature on success
 
+### IoC Order
+
+Immediate or Cancel (IoC) orders are matched in the same tx. In contrast, other order types are filled asynchronously by decentralized Keeper bots.
+
+To place an IoC order the caller must specify the taker account and order Id to match against.
+
+- `orderType`: 'oracle' or 'limit'
+- `maxPosition*`: the maximum amount of asset after fill
+- `minPosition*`: the minimum amount of asset after fill (supports negative values for short positions)
+
+**\*** these values include the existing position i.e `maxPosition = currentPosition + maxFill`
+
+```bash
+$ curl localhost:8080/v2/orders/ioc -X POST \
+-H 'content-type: application/json' \
+-d '{
+        "taker": "9JtczxrJjPM4J1xooxr2rFXmRivarb4BwjNiBgXDwe2p",
+        "takerOrderId": 1,
+        "bid": 1.23,
+        "orderType": "limit",
+        "maxPosition": "5"
+}'
+```
+
 ### Modify Orders
+
 like place orders but caller must use either `orderId` or `userOrderId` to indicate which order(s) to modify.
 
 - `amount` can be modified to flip the order from long/short to bid/ask
 - the order market cannot be modified.
+
 ```bash
 $ curl localhost:8080/v2/orders -X PATCH \
 -H 'content-type: application/json' \
@@ -395,9 +453,11 @@ $ curl localhost:8080/v2/orders -X PATCH \
     }]
 }'
 ```
+
 Returns solana tx signature on success
 
 ### Cancel Orders
+
 ```bash
 # cancel all by market id
 $ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}}'
@@ -408,6 +468,7 @@ $ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d
 # cancel all orders
 $ curl localhost:8080/v2/orders -X DELETE
 ```
+
 Returns solana tx signature on success
 
 ### Atomic Cancel/Modify/Place Orders
@@ -447,10 +508,13 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 ```
 
 ## WebSocket API
+
 Websocket API is provided for live event streams by default at port `127.0.0.1:1337`
 
 ### Subscribing
+
 Subscribe to order and fills updates by a `subAccountId` (`0` is the drift default)
+
 ```ts
 {"method":"subscribe", "subAccountId":0}
 // unsubscribe
@@ -462,72 +526,77 @@ Subscribe to order and fills updates by a `subAccountId` (`0` is the drift defau
 event payloads can be distinguished by "channel" field and the "data" payload is keyed by the event type
 
 **order cancelled**
+
 ```json
 {
-    "data": {
-        "orderCancel": {
-            "orderId": 156,
-            "ts": 1704777451,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
-            "txIdx":15
-        }
-    },
-    "channel": "orders",
-    "subAccountId": 0
+  "data": {
+    "orderCancel": {
+      "orderId": 156,
+      "ts": 1704777451,
+      "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+      "txIdx": 15
+    }
+  },
+  "channel": "orders",
+  "subAccountId": 0
 }
 ```
 
 **order expired**
+
 - if an order's `maxTs` is reached then it can be cancelled by protocol keeper bots, producing the following expired event.
+
 ```json
 {
-    "data": {
-        "orderExpire": {
-            "orderId": 156,
-            "fee": "-0.0012",
-            "ts": 1704777451,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
-        }
-    },
-    "channel": "orders",
-    "subAccountId": 0
+  "data": {
+    "orderExpire": {
+      "orderId": 156,
+      "fee": "-0.0012",
+      "ts": 1704777451,
+      "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+    }
+  },
+  "channel": "orders",
+  "subAccountId": 0
 }
 ```
 
 **order created**
+
 - auction and trigger fields are only relevant for auction type or trigger type orders respectively.
 - `price` is shown as `0` for market and oracle orders.
+
 ```json
 {
-   "data": {
-        "orderCreate": {
-            "order": {
-                "slot": 271243169,
-                "price": "0",
-                "amount": "0.1",
-                "filled": "0",
-                "triggerPrice": "0",
-                "auctionStartPrice": "0",
-                "auctionEndPrice": "0",
-                "maxTs": 0,
-                "oraclePriceOffset": "2",
-                "orderId": 157,
-                "marketIndex": 0,
-                "orderType": "limit",
-                "marketType": "perp",
-                "userOrderId": 102,
-                "direction": "buy",
-                "reduceOnly": false,
-                "postOnly": false,
-                "auctionDuration": 0
-            },
-            "ts": 1704777347,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
-            "txIdx": 31,
-        }
-    },
-    "channel": "orders",
-    "subAccountId": 0
+  "data": {
+    "orderCreate": {
+      "order": {
+        "slot": 271243169,
+        "price": "0",
+        "amount": "0.1",
+        "filled": "0",
+        "triggerPrice": "0",
+        "auctionStartPrice": "0",
+        "auctionEndPrice": "0",
+        "maxTs": 0,
+        "oraclePriceOffset": "2",
+        "orderId": 157,
+        "marketIndex": 0,
+        "orderType": "limit",
+        "marketType": "perp",
+        "userOrderId": 102,
+        "direction": "buy",
+        "reduceOnly": false,
+        "postOnly": false,
+        "auctionDuration": 0
+      },
+      "ts": 1704777347,
+      "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+      "txIdx": 31
+    }
+  },
+  "channel": "orders",
+  "subAccountId": 0
 }
 ```
 
@@ -537,36 +606,35 @@ event payloads can be distinguished by "channel" field and the "data" payload is
 
 ```json
 {
-    "data": {
-        "fill": {
-            "side": "sell",
-            "fee": "-0.100549",
-            "amount": "0.0326",
-            "price": "61687",
-            "oraclePrice": "61335.477737",
-            "orderId": 11198929,
-            "marketIndex": 1,
-            "marketType": "perp",
-            "ts": 1709248100,
-            "txIdx": 12,
-            "signature": "5xZvkv2Y5nGgpYpitFyzg99AVwqHPwspapjxBFmPygrKWdwPfaBd6Tm3sQEw3k8GsZAd68cJ9cPr89wJ11agWthp",
-            "maker": "B24N44F45nq4Sk2gVQqtWG3bfXW2FJKZrVqhhWcxJNv3",
-            "makerOrderId": 11198929,
-            "makerFee": "-0.100549",
-            "taker": "Fii4Aio6rGoa8BDH6mR7JfTWA73FA7No1SNauYEWCoVn",
-            "takerOrderId": 40,
-            "takerFee": "0.502750"
-        }
-    },
-    "channel": "fills",
-    "subAccountId": 1
+  "data": {
+    "fill": {
+      "side": "sell",
+      "fee": "-0.100549",
+      "amount": "0.0326",
+      "price": "61687",
+      "oraclePrice": "61335.477737",
+      "orderId": 11198929,
+      "marketIndex": 1,
+      "marketType": "perp",
+      "ts": 1709248100,
+      "txIdx": 12,
+      "signature": "5xZvkv2Y5nGgpYpitFyzg99AVwqHPwspapjxBFmPygrKWdwPfaBd6Tm3sQEw3k8GsZAd68cJ9cPr89wJ11agWthp",
+      "maker": "B24N44F45nq4Sk2gVQqtWG3bfXW2FJKZrVqhhWcxJNv3",
+      "makerOrderId": 11198929,
+      "makerFee": "-0.100549",
+      "taker": "Fii4Aio6rGoa8BDH6mR7JfTWA73FA7No1SNauYEWCoVn",
+      "takerOrderId": 40,
+      "takerFee": "0.502750"
+    }
+  },
+  "channel": "fills",
+  "subAccountId": 1
 }
 ```
 
 **order modify**
 
 Modifying an order produces a cancel event followed by a create event with the same orderId
-
 
 **order cancel (missing) | experimental**
 
@@ -578,16 +646,16 @@ this event may be safely ignored, it is added in an effort to help order life-cy
 
 ```json
 {
-    "data": {
-        "orderCancelMissing": {
-            "userOrderId": 5,
-            "orderId": 0,
-            "ts": 1704777451,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
-        }
-    },
-    "channel": "orders",
-    "subAccountId": 0
+  "data": {
+    "orderCancelMissing": {
+      "userOrderId": 5,
+      "orderId": 0,
+      "ts": 1704777451,
+      "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz"
+    }
+  },
+  "channel": "orders",
+  "subAccountId": 0
 }
 ```
 
@@ -599,21 +667,22 @@ settled funding payment event for open perp positions
 
 ```json
 {
-    "data": {
-        "fundingPayment": {
-            "amount": "0.005558",
-            "marketIndex": 0,
-            "ts": 1708664443,
-            "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
-            "txIdx": 1
-        }
-    },
-    "channel": "funding",
-    "subAccountId": 0
+  "data": {
+    "fundingPayment": {
+      "amount": "0.005558",
+      "marketIndex": 0,
+      "ts": 1708664443,
+      "signature": "2Cdo5Xgxj6uWY6dnWmuU5a8tH5fKC2K6YUqzVYKgnm8KkMVhPczBZrNEs4VGwEBMhgosifmNjBXSjFMWbGKJiqSz",
+      "txIdx": 1
+    }
+  },
+  "channel": "funding",
+  "subAccountId": 0
 }
 ```
 
 ## Emulation Mode
+
 Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
 
 The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
@@ -621,11 +690,13 @@ The gateway will receive all events, positions, etc. as normal but be unable to 
 note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
 
 ### Errors
+
 error responses have the following JSON structure:
+
 ```json
 {
-    "code": "<http status code | program error code>",
-    "reason": "<explanation>"
+  "code": "<http status code | program error code>",
+  "reason": "<explanation>"
 }
 ```
 
@@ -633,8 +704,10 @@ Some endpoints send transactions to the drift program and can return program err
 The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)
 
 ### Common Errors
+
 `AccountNotFound` usually means the drift user (sub)account has not been initialized.
 Use the UI or Ts/Python sdk to initialize the sub-account first.
+
 ```json
 {
   "code": 500,
@@ -642,8 +715,8 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
 }
 ```
 
-The free _api.mainnet-beta.solana.com_RPC cannot be used due to rate-limits on `getProgramAccounts` calls
+The free \_api.mainnet-beta.solana.com_RPC cannot be used due to rate-limits on `getProgramAccounts` calls
+
 ```rust
 Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(410), ...
 ```
-

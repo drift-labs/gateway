@@ -350,30 +350,32 @@ impl AppState {
         let taker_account_stats = self.client.get_user_stats(&req.taker).await?;
         let taker_account = self.client.get_user_account(&req.taker).await?;
         let referrer_info = ReferrerInfo::get_referrer_info(taker_account_stats);
-        // TODO: allow sub-account switching
         let result = self
             .jit_client
-            .jit(JitIxParams::new(
-                req.taker,
-                Wallet::derive_stats_account(&taker_account.authority, &PROGRAM_ID),
-                taker_account,
-                req.taker_order_id,
-                req.max_position
-                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
-                    .unwrap_or_default(),
-                req.min_position
-                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
-                    .unwrap_or_default(),
-                req.bid
-                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
-                    .unwrap_or_default(),
-                req.ask
-                    .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
-                    .unwrap_or_default(),
-                None, // price type
-                referrer_info,
-                None,
-            ))
+            .jit(
+                JitIxParams::new(
+                    req.taker,
+                    Wallet::derive_stats_account(&taker_account.authority, &PROGRAM_ID),
+                    taker_account,
+                    req.taker_order_id,
+                    req.max_position
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.min_position
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.bid
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.ask
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.order_type,
+                    referrer_info,
+                    None,
+                ),
+                sub_account_id,
+            )
             .await;
 
         info!("{result:?}");

@@ -270,6 +270,7 @@ async fn main() -> std::io::Result<()> {
                     .service(get_positions)
                     .service(get_orders)
                     .service(create_orders)
+                    .service(place_ioc_order)
                     .service(cancel_orders)
                     .service(modify_orders)
                     .service(get_orderbook)

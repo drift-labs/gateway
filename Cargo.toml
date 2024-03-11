@@ -8,7 +8,7 @@ actix-web = "4.4.0"
 argh = "0.1.12"
 # must match version used by jit-proxy
 drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "1ba0bbcb" }
-jit-proxy = { package = "rust", git = "https://github.com/jordy25519/jit-proxy", rev = "e98b764" }
+jit-proxy = { package = "rust", git = "https://github.com/jordy25519/jit-proxy", rev = "93ec79fa" }
 env_logger = "0.10.1"
 futures-util = "0.3.29"
 log = "0.4.20"

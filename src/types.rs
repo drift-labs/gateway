@@ -2,6 +2,8 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
+use std::str::FromStr;
+
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob::{self, L2Level, L2Orderbook},
@@ -11,6 +13,7 @@ use drift_sdk::{
     },
     Pubkey,
 };
+use jit_proxy::jit_proxy_client::PriceType;
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -101,6 +104,26 @@ where
     }
 }
 
+fn jit_order_type_de<'de, D>(deserializer: D) -> Result<Option<PriceType>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let order_type = Deserialize::deserialize(deserializer)?;
+    match order_type {
+        "limit" => Ok(Some(PriceType::Limit)),
+        "oracle" => Ok(Some(PriceType::Oracle)),
+        _ => Err(serde::de::Error::custom("invalid order type")),
+    }
+}
+
+fn pubkey_de<'de, D>(deserializer: D) -> Result<Pubkey, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let pk_base58: &str = Deserialize::deserialize(deserializer)?;
+    Pubkey::from_str(pk_base58).map_err(|_| serde::de::Error::custom("invalid pubkey"))
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SpotPosition {
@@ -136,21 +159,11 @@ pub struct PerpPosition {
     amount: Decimal,
     average_entry: Decimal,
     market_index: u16,
-    #[serde(skip)]
-    inner: sdk_types::PerpPosition,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     extended: Option<PerpPositionExtended>,
 }
 
 impl PerpPosition {
-    pub fn calculate_unrealized_pnl(&self, oracle_price: i64) -> Decimal {
-        Decimal::new(
-            self.inner
-                .get_unrealized_pnl(oracle_price)
-                .expect("no overflow") as i64,
-            PRICE_DECIMALS,
-        )
-    }
     pub fn set_extended_info(&mut self, ext: PerpPositionExtended) {
         self.extended = Some(ext);
     }
@@ -166,7 +179,6 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
             amount: amount.normalize(),
             market_index: value.market_index,
             average_entry: average_entry.normalize().round_dp(4),
-            inner: value,
             extended: None,
         }
     }
@@ -509,15 +521,18 @@ pub struct CancelAndPlaceRequest {
     pub place: PlaceOrdersRequest,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaceIoCOrderRequest {
+    #[serde(deserialize_with = "pubkey_de")]
     pub taker: Pubkey,
     pub taker_order_id: u32,
     pub bid: Option<Decimal>,
     pub ask: Option<Decimal>,
     pub min_position: Option<Decimal>,
     pub max_position: Option<Decimal>,
+    #[serde(deserialize_with = "jit_order_type_de")]
+    pub order_type: Option<PriceType>,
 }
 
 /// Serialize DLOB with human readable numeric values
