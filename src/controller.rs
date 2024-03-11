@@ -1,5 +1,5 @@
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION, PROGRAM_ID},
+    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION, PROGRAM_ID},
     dlob::DLOBClient,
     event_subscriber::{try_parse_log, CommitmentConfig},
     liquidation::calculate_liquidation_price_and_unrealized_pnl,
@@ -347,8 +347,8 @@ impl AppState {
         req: PlaceIoCOrderRequest,
         sub_account_id: Option<u16>,
     ) -> GatewayResult<()> {
-        let taker_account_stats = self.client.get_user_stats(&req.taker).await?;
         let taker_account = self.client.get_user_account(&req.taker).await?;
+        let taker_account_stats = self.client.get_user_stats(&taker_account.authority).await?;
         let referrer_info = ReferrerInfo::get_referrer_info(taker_account_stats);
         let result = self
             .jit_client
@@ -365,10 +365,10 @@ impl AppState {
                         .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
                         .unwrap_or_default(),
                     req.bid
-                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .map(|x| x.mantissa() as i64 * PRICE_PRECISION as i64)
                         .unwrap_or_default(),
                     req.ask
-                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .map(|x| x.mantissa() as i64 * PRICE_PRECISION as i64)
                         .unwrap_or_default(),
                     req.order_type,
                     referrer_info,
@@ -378,7 +378,7 @@ impl AppState {
             )
             .await;
 
-        info!("{result:?}");
+        info!(target: LOG_TARGET, "ioc/jit: {result:?}");
 
         Ok(())
     }
