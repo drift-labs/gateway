@@ -455,7 +455,7 @@ impl AppState {
             .send_transaction_with_config(
                 &tx,
                 RpcSendTransactionConfig {
-                    max_retries: Some(3),
+                    max_retries: Some(0),
                     preflight_commitment: Some(self.tx_commitment.commitment),
                     ..Default::default()
                 },
