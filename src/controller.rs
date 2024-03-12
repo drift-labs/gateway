@@ -1,17 +1,17 @@
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION},
+    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION, PROGRAM_ID},
     dlob::DLOBClient,
-    event_subscriber::try_parse_log,
-    event_subscriber::CommitmentConfig,
+    event_subscriber::{try_parse_log, CommitmentConfig},
     liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
-        Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
-        SdkResult, VersionedMessage,
+        Context, MarketId, MarketType, ModifyOrderParams, ReferrerInfo, RpcSendTransactionConfig,
+        SdkError, SdkResult, VersionedMessage,
     },
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{debug, warn};
+use jit_proxy::jit_proxy_client::{JitIxParams, JitProxyClient};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
@@ -24,8 +24,8 @@ use crate::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
         GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, PRICE_DECIMALS,
+        PerpPositionExtended, PlaceIoCOrderRequest, PlaceOrdersRequest, SolBalanceResponse,
+        SpotPosition, TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     LOG_TARGET,
@@ -50,6 +50,7 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
+    pub jit_client: JitProxyClient<RpcAccountProvider>,
     pub client: Arc<DriftClient<RpcAccountProvider>>,
     dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
@@ -102,6 +103,7 @@ impl AppState {
         };
 
         Self {
+            jit_client: JitProxyClient::new(client.clone(), None, None),
             delegated: wallet.is_delegated(),
             wallet,
             client: Arc::new(client),
@@ -338,6 +340,47 @@ impl AppState {
         .build();
 
         self.send_tx(tx, "place_orders").await
+    }
+
+    pub async fn place_ioc_order(
+        &self,
+        req: PlaceIoCOrderRequest,
+        sub_account_id: Option<u16>,
+    ) -> GatewayResult<()> {
+        let taker_account = self.client.get_user_account(&req.taker).await?;
+        let taker_account_stats = self.client.get_user_stats(&taker_account.authority).await?;
+        let referrer_info = ReferrerInfo::get_referrer_info(taker_account_stats);
+        let result = self
+            .jit_client
+            .jit(
+                JitIxParams::new(
+                    req.taker,
+                    Wallet::derive_stats_account(&taker_account.authority, &PROGRAM_ID),
+                    taker_account,
+                    req.taker_order_id,
+                    req.max_position
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.min_position
+                        .map(|x| x.mantissa() as i64 * BASE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.bid
+                        .map(|x| x.mantissa() as i64 * PRICE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.ask
+                        .map(|x| x.mantissa() as i64 * PRICE_PRECISION as i64)
+                        .unwrap_or_default(),
+                    req.order_type,
+                    referrer_info,
+                    None,
+                ),
+                sub_account_id,
+            )
+            .await;
+
+        info!(target: LOG_TARGET, "ioc/jit: {result:?}");
+
+        Ok(())
     }
 
     pub async fn modify_orders(

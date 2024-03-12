@@ -327,14 +327,14 @@ impl AccountEvent {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-enum Side {
+pub(crate) enum Side {
     Buy,
     Sell,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct OrderWithDecimals {
+pub(crate) struct OrderWithDecimals {
     /// The slot the order was placed
     pub slot: u64,
     /// The limit price for the order (can be 0 for market orders)
@@ -609,7 +609,6 @@ pub(crate) fn map_drift_event_for_account(
             fee,
             ts,
             signature,
-            tx_idx,
             ..
         } => (
             Channel::Orders,
