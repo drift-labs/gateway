@@ -396,12 +396,20 @@ mod tests {
     }
 
     async fn setup_controller(emulate: Option<Pubkey>) -> AppState {
+        let _ = env_logger::try_init();
         let wallet = if emulate.is_none() {
             create_wallet(Some(get_seed()), None, None)
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
+        AppState::new(
+            TEST_ENDPOINT,
+            true,
+            wallet,
+            Some((CommitmentConfig::finalized(), CommitmentConfig::finalized())),
+            None,
+        )
+        .await
     }
 
     #[actix_web::test]
@@ -602,5 +610,32 @@ mod tests {
             "reason": "tx not found: 4Mi32iRCqo2XXPjnV4bywyBpommVmbm5AN4wqbkgGFwDM3bTz6xjNfaomAnGJNFxicoMjX5x3D1b3DGW9xwkY7ms"
         });
         assert_eq!(events, expect_body, "incorrect resp body");
+    }
+
+    #[actix_web::test]
+    async fn post_ioc_order_works() {
+        let controller = setup_controller(None).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(place_ioc_order),
+        )
+        .await;
+        let payload = json!({
+            "taker": "9JtczxrJjPM4J1xooxr2rFXmRivarb4BwjNiBgXDwe2p",
+            "takerOrderId": 999,
+            "bid": 1.0,
+            "orderType": "limit",
+            "maxPosition": "5"
+        })
+        .to_string();
+        let req = test::TestRequest::default()
+            .method(Method::POST)
+            .uri("/orders/ioc")
+            .set_payload(payload)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
     }
 }
