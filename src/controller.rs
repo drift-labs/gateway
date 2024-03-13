@@ -135,6 +135,7 @@ impl AppState {
         &self,
         req: CancelOrdersRequest,
         sub_account_id: Option<u16>,
+        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
@@ -147,7 +148,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, None);
+        .with_priority_fee(pf, cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
         self.send_tx(tx, "cancel_orders").await
     }
@@ -275,6 +276,7 @@ impl AppState {
         &self,
         req: CancelAndPlaceRequest,
         sub_account_id: Option<u16>,
+        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
         let orders = req
             .place
@@ -298,7 +300,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, None);
+        .with_priority_fee(pf, cu_limit);
 
         let builder = build_cancel_ix(builder, req.cancel)?;
         let tx = build_modify_ix(builder, req.modify, self.client.program_data())?
@@ -312,6 +314,7 @@ impl AppState {
         &self,
         req: PlaceOrdersRequest,
         sub_account_id: Option<u16>,
+        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
@@ -333,7 +336,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, None)
+        .with_priority_fee(pf, cu_limit)
         .place_orders(orders)
         .build();
 
@@ -344,6 +347,7 @@ impl AppState {
         &self,
         req: ModifyOrdersRequest,
         sub_account_id: Option<u16>,
+        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(sub_account_id);
         let (account_data, pf) = tokio::join!(
@@ -357,7 +361,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, None);
+        .with_priority_fee(pf, cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders").await
     }

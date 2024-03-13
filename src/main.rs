@@ -27,6 +27,8 @@ pub const LOG_TARGET: &str = "gateway";
 struct Args {
     #[serde(default, rename = "subAccountId")]
     sub_account_id: Option<u16>,
+    #[serde(default, rename = "computeUnitLimit")]
+    cu_limit: Option<u32>,
 }
 
 #[get("/markets")]
@@ -61,7 +63,11 @@ async fn create_orders(
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
         Ok(req) => {
             debug!(target: LOG_TARGET, "request: {req:?}");
-            handle_result(controller.place_orders(req, args.sub_account_id).await)
+            handle_result(
+                controller
+                    .place_orders(req, args.sub_account_id, args.cu_limit)
+                    .await,
+            )
         }
         Err(err) => handle_deser_error(err),
     }
@@ -76,7 +82,11 @@ async fn modify_orders(
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
         Ok(req) => {
             debug!(target: LOG_TARGET, "request: {req:?}");
-            handle_result(controller.modify_orders(req, args.sub_account_id).await)
+            handle_result(
+                controller
+                    .modify_orders(req, args.sub_account_id, args.cu_limit)
+                    .await,
+            )
         }
         Err(err) => handle_deser_error(err),
     }
@@ -97,7 +107,11 @@ async fn cancel_orders(
         }
     };
     debug!(target: LOG_TARGET, "request: {req:?}");
-    handle_result(controller.cancel_orders(req, args.sub_account_id).await)
+    handle_result(
+        controller
+            .cancel_orders(req, args.sub_account_id, args.cu_limit)
+            .await,
+    )
 }
 
 #[post("/orders/cancelAndPlace")]
@@ -111,7 +125,7 @@ async fn cancel_and_place_orders(
             debug!(target: LOG_TARGET, "request: {req:?}");
             handle_result(
                 controller
-                    .cancel_and_place_orders(req, args.sub_account_id)
+                    .cancel_and_place_orders(req, args.sub_account_id, args.cu_limit)
                     .await,
             )
         }
