@@ -442,10 +442,10 @@ impl AppState {
         tx: VersionedMessage,
         reason: &'static str,
     ) -> GatewayResult<TxResponse> {
-        let recent_block_hash = self
+        let (recent_block_hash, _) = self
             .client
             .inner()
-            .get_latest_blockhash()
+            .get_latest_blockhash_with_commitment(CommitmentConfig::finalized())
             .await
             .map_err(SdkError::from)?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
