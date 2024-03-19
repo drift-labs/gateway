@@ -42,7 +42,7 @@ export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 drift-gateway --dev https://api.devnet.solana.com
 
 # or mainnet
-# NB: `api.mainnet-beta.solana.com` cannot be used due to rate limits on certain RPC calls
+# NB: `api.mainnet-beta.solana.com` is not recommend for production use cases
 drift-gateway https://rpc-provider.example.com
 ```
 
