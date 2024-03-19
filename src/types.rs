@@ -4,7 +4,7 @@
 //!
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
-    dlob::{self, L2Level, L2Orderbook},
+    dlob_client::{L2Level, L2Orderbook},
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
@@ -135,21 +135,11 @@ pub struct PerpPosition {
     amount: Decimal,
     average_entry: Decimal,
     market_index: u16,
-    #[serde(skip)]
-    inner: sdk_types::PerpPosition,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     extended: Option<PerpPositionExtended>,
 }
 
 impl PerpPosition {
-    pub fn calculate_unrealized_pnl(&self, oracle_price: i64) -> Decimal {
-        Decimal::new(
-            self.inner
-                .get_unrealized_pnl(oracle_price)
-                .expect("no overflow") as i64,
-            PRICE_DECIMALS,
-        )
-    }
     pub fn set_extended_info(&mut self, ext: PerpPositionExtended) {
         self.extended = Some(ext);
     }
@@ -165,7 +155,6 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
             amount: amount.normalize(),
             market_index: value.market_index,
             average_entry: average_entry.normalize().round_dp(4),
-            inner: value,
             extended: None,
         }
     }
@@ -484,7 +473,7 @@ impl TxResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct TxEventsResponse {
     events: Vec<AccountEvent>,
 }
@@ -492,12 +481,6 @@ pub struct TxEventsResponse {
 impl TxEventsResponse {
     pub fn new(events: Vec<AccountEvent>) -> Self {
         Self { events }
-    }
-}
-
-impl Default for TxEventsResponse {
-    fn default() -> Self {
-        Self { events: Vec::new() }
     }
 }
 
@@ -568,7 +551,7 @@ pub struct PriceLevel {
 }
 
 impl PriceLevel {
-    pub fn new(level: &dlob::L2Level, decimals: u32) -> Self {
+    pub fn new(level: &L2Level, decimals: u32) -> Self {
         Self {
             price: Decimal::new(level.price, PRICE_PRECISION.ilog10()),
             amount: Decimal::new(level.size, decimals),
