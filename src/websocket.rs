@@ -609,7 +609,6 @@ pub(crate) fn map_drift_event_for_account(
             fee,
             ts,
             signature,
-            tx_idx,
             ..
         } => (
             Channel::Orders,
