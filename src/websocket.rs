@@ -5,7 +5,7 @@ use std::{collections::HashMap, ops::Neg, sync::Arc};
 use drift_sdk::{
     async_utils::retry_policy::{self},
     constants::ProgramData,
-    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient},
+    event_subscriber::{DriftEvent, EventSubscriber},
     types::{MarketType, Order, OrderType, PositionDirection},
     Pubkey, Wallet,
 };
@@ -104,12 +104,12 @@ async fn accept_connection(
                                 let sub_account_address =
                                     wallet.sub_account(request.sub_account_id as u16);
                                 let mut event_stream = EventSubscriber::subscribe(
-                                    PubsubClient::new(ws_endpoint.as_str())
-                                        .await
-                                        .expect("ws connect"),
+                                    ws_endpoint.as_str(),
                                     sub_account_address,
                                     retry_policy::forever(5),
-                                );
+                                )
+                                .await
+                                .expect("ws connects");
                                 let subscription_map = Arc::clone(&subscriptions);
                                 let sub_account_id = request.sub_account_id;
                                 let message_tx = message_tx.clone();

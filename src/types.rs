@@ -6,14 +6,14 @@ use std::str::FromStr;
 
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
-    dlob::{self, L2Level, L2Orderbook},
+    dlob_client::{L2Level, L2Orderbook},
+    jit_client::PriceType,
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
     },
     Pubkey,
 };
-use jit_proxy::jit_proxy_client::PriceType;
 use rust_decimal::Decimal;
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -595,7 +595,7 @@ pub struct PriceLevel {
 }
 
 impl PriceLevel {
-    pub fn new(level: &dlob::L2Level, decimals: u32) -> Self {
+    pub fn new(level: &L2Level, decimals: u32) -> Self {
         Self {
             price: Decimal::new(level.price, PRICE_PRECISION.ilog10()),
             amount: Decimal::new(level.size, decimals),

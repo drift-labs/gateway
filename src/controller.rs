@@ -1,8 +1,9 @@
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION, PROGRAM_ID},
-    dlob::DLOBClient,
+    dlob_client::DLOBClient,
     event_subscriber::{try_parse_log, CommitmentConfig},
-    liquidation::calculate_liquidation_price_and_unrealized_pnl,
+    jit_client::{JitIxParams, JitProxyClient},
+    math::liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, ReferrerInfo, RpcSendTransactionConfig,
         SdkError, SdkResult, VersionedMessage,
@@ -10,7 +11,6 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use jit_proxy::jit_proxy_client::{JitIxParams, JitProxyClient};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
