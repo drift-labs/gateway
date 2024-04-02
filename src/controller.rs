@@ -1,8 +1,7 @@
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     dlob_client::DLOBClient,
-    event_subscriber::try_parse_log,
-    event_subscriber::CommitmentConfig,
+    event_subscriber::{try_parse_log, CommitmentConfig},
     math::liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
         Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
@@ -23,8 +22,8 @@ use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-        GetPositionsResponse, Market, ModifyOrdersRequest, Order, OrderbookL2, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
+        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, OrderbookL2,
+        PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
         TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
@@ -209,9 +208,11 @@ impl AppState {
         market: Market,
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(sub_account_id);
-        let (perp_position, user) = tokio::join!(
+        let (perp_position, user, oracle) = tokio::join!(
             self.client.perp_position(&sub_account, market.market_index),
             self.client.get_user_account(&sub_account),
+            self.client
+                .oracle_price(MarketId::perp(market.market_index)),
         );
 
         if let Some(perp_position) = perp_position? {
@@ -221,10 +222,20 @@ impl AppState {
                 market.market_index,
             )
             .await?;
+            let oracle_price = oracle?;
+            let unsettled_pnl = Decimal::new(
+                perp_position
+                    .get_unrealized_pnl(oracle_price)
+                    .unwrap_or_default() as i64,
+                PRICE_DECIMALS,
+            );
+
             let mut p: PerpPosition = perp_position.into();
             p.set_extended_info(PerpPositionExtended {
                 liquidation_price: Decimal::new(result.liquidation_price, PRICE_DECIMALS),
                 unrealized_pnl: Decimal::new(result.unrealized_pnl as i64, PRICE_DECIMALS),
+                unsettled_pnl: unsettled_pnl.normalize(),
+                oracle_price: Decimal::new(oracle_price, PRICE_DECIMALS),
             });
 
             Ok(p)
@@ -270,6 +281,20 @@ impl AppState {
             spot: spot.iter().map(|x| (*x).into()).collect(),
             perp: perp.iter().map(|x| (*x).into()).collect(),
         }
+    }
+
+    pub async fn get_perp_market_info(
+        &self,
+        market_index: u16,
+    ) -> GatewayResult<MarketInfoResponse> {
+        let perp = self.client.get_perp_market_info(market_index).await?;
+        let open_interest = (perp.get_open_interest() / BASE_PRECISION as u128) as u64;
+        let max_open_interest = (perp.amm.max_open_interest / BASE_PRECISION as u128) as u64;
+
+        Ok(MarketInfoResponse {
+            open_interest,
+            max_open_interest,
+        })
     }
 
     pub async fn cancel_and_place_orders(

@@ -37,6 +37,11 @@ async fn get_markets(controller: web::Data<AppState>) -> impl Responder {
     Json(markets)
 }
 
+#[get("/marketInfo/{index}")]
+async fn get_market_info(controller: web::Data<AppState>, path: web::Path<u16>) -> impl Responder {
+    handle_result(controller.get_perp_market_info(*path).await)
+}
+
 #[get("/orders")]
 async fn get_orders(
     controller: web::Data<AppState>,
@@ -275,7 +280,8 @@ async fn main() -> std::io::Result<()> {
                     .service(cancel_and_place_orders)
                     .service(get_sol_balance)
                     .service(get_positions_extended)
-                    .service(get_tx_events),
+                    .service(get_tx_events)
+                    .service(get_market_info),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
@@ -400,6 +406,24 @@ mod tests {
             create_wallet(None, emulate, None)
         };
         AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
+    }
+
+    #[actix_web::test]
+    async fn get_market_info_works() {
+        let controller = setup_controller(None).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_market_info),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/marketInfo/0")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
     }
 
     #[actix_web::test]

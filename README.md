@@ -11,7 +11,8 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
    - [Sub-account Switching](#sub-account-switching)
 4. [API Examples](#api-examples)
    - [HTTP API](#http-api)
-     - [`GET` Market Info](#get-market-info)
+     - [`GET` Markets](#get-markets)
+     - [`GET` MarketInfo](#get-market-info)
      - [`GET` Orderbook](#get-orderbook)
      - [`GET` Orders](#get-orders)
      - [`GET` Positions](#get-positions)
@@ -29,6 +30,8 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 ## Build & Run
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
+
+supports rust <= 1.76.0
 
 ```bash
 # build
@@ -119,7 +122,7 @@ Please refer to https://drift-labs.github.io/v2-teacher/ for further examples an
 
 ### HTTP API
 
-### Get Market Info
+### Get Markets
 
 gets info on all available spot & perp markets
 
@@ -134,6 +137,8 @@ $ curl localhost:8080/v2/markets
 - `priceStep` smallest order price increment for the market
 - `amountStep` smallest order amount increment for the market
 - `minOrderSize` minimum order amount for the market
+- `initialMarginRatio` collateral required to open position
+- `maintenanceMarginRatio` collateral required to maintain position
 
 ```json
 {
@@ -143,7 +148,7 @@ $ curl localhost:8080/v2/markets
       "symbol": "SOL",
       "priceStep": "0.0001",
       "amountStep": "0.1",
-      "minOrderSize": "0.1"
+      "minOrderSize": "0.1",
     }
     // ...
   ],
@@ -153,10 +158,29 @@ $ curl localhost:8080/v2/markets
       "symbol": "SOL-PERP",
       "priceStep": "0.0001",
       "amountStep": "0.01",
-      "minOrderSize": "0.01"
+      "minOrderSize": "0.01",
+      "initialMarginRatio": "0.1",
+      "maintenanceMarginRatio": "0.05"
     }
     // ...
   ]
+}
+```
+
+## Get Market Info
+
+Returns market details (perps only)
+
+```bash
+$ curl localhost:8080/v2/marketInfo/0
+```
+
+**Response**
+
+```json
+{
+  "openInterest": 662876,
+  "maxOpenInterest": 850000
 }
 ```
 
@@ -308,7 +332,9 @@ get extended position info for perps positions
 $ curl localhost:8080/v2/positionInfo/0
 ```
 
-note: unrealized PnL is based on the oracle price at time of query
+note: 
+- `unrealizedPnL` is based on the oracle price at time of query
+- `unsettledPnl` does not include unsettled funding amounts
 
 **Response**
 
@@ -318,7 +344,9 @@ note: unrealized PnL is based on the oracle price at time of query
   "averageEntry": "102.2629",
   "marketIndex": 0,
   "liquidationPrice": "213.405881",
-  "unrealizedPnl": "-0.305832"
+  "unrealizedPnl": "-0.305832",
+  "unsettledPnl": "2795.32259",
+  "oraclePrice": "184.942200"
 }
 ```
 
