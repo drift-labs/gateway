@@ -165,6 +165,8 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
 pub struct PerpPositionExtended {
     pub liquidation_price: Decimal,
     pub unrealized_pnl: Decimal,
+    pub unsettled_pnl: Decimal,
+    pub oracle_price: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -401,6 +403,10 @@ pub struct MarketInfo {
     price_step: Decimal,
     amount_step: Decimal,
     min_order_size: Decimal,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    initial_margin_ratio: Option<Decimal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    maintenance_margin_ratio: Option<Decimal>,
 }
 
 impl From<SpotMarket> for MarketInfo {
@@ -414,6 +420,8 @@ impl From<SpotMarket> for MarketInfo {
                 .normalize(),
             amount_step: Decimal::new(value.quantity_tick() as i64, value.decimals).normalize(),
             min_order_size: Decimal::new(value.min_order_size() as i64, value.decimals).normalize(),
+            initial_margin_ratio: None,
+            maintenance_margin_ratio: None,
         }
     }
 }
@@ -431,8 +439,21 @@ impl From<PerpMarket> for MarketInfo {
                 .normalize(),
             min_order_size: Decimal::new(value.min_order_size() as i64, BASE_PRECISION.ilog10())
                 .normalize(),
+            initial_margin_ratio: Some(
+                Decimal::new(value.margin_ratio_initial as i64, 4).normalize(),
+            ),
+            maintenance_margin_ratio: Some(
+                Decimal::new(value.margin_ratio_maintenance as i64, 4).normalize(),
+            ),
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketInfoResponse {
+    pub open_interest: u64,
+    pub max_open_interest: u64,
 }
 
 #[derive(Serialize)]
