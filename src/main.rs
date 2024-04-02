@@ -409,6 +409,24 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn get_market_info_works() {
+        let controller = setup_controller(None).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(get_market_info),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::GET)
+            .uri("/marketInfo/0")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
     async fn get_orders_works() {
         let controller = setup_controller(None).await;
         let app = test::init_service(
