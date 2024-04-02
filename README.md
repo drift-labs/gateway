@@ -332,7 +332,9 @@ get extended position info for perps positions
 $ curl localhost:8080/v2/positionInfo/0
 ```
 
-note: unrealized PnL is based on the oracle price at time of query
+note: 
+- `unrealizedPnL` is based on the oracle price at time of query
+- `unsettledPnl` does not include unsettled funding amounts
 
 **Response**
 
