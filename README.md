@@ -3,40 +3,48 @@
 Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ## Table of Contents
-
-1. [Introduction](#introduction)
-2. [Installation](#installation)
-3. [Usage](#usage)
-   - [Delegated Signing Mode](#delegated-signing-mode)
-   - [Sub-account Switching](#sub-account-switching)
-4. [API Examples](#api-examples)
-   - [HTTP API](#http-api)
-     - [`GET` Markets](#get-markets)
-     - [`GET` MarketInfo](#get-market-info)
-     - [`GET` Orderbook](#get-orderbook)
-     - [`GET` Orders](#get-orders)
-     - [`GET` Positions](#get-positions)
-     - [`GET` Perp Position Info](#get-position-info-perps-only)
-     - [`GET` Transaction Events](#get-transaction-events)
-     - [`GET` SOL Balance](#get-sol-balance)
-     - [`POST` Place Orders](#place-orders)
-     - [`PATCH` Modify Orders](#modify-orders)
-     - [`DELETE` Cancel Orders](#cancel-orders)
-     - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
-   - [Websocket API](#websocket-api)
-     - [Subscribing](#subscribing)
-     - [Event Payloads](#event-payloads)
+1. [Build & Run](#build--run)
+    - [From Source](#from-source)
+    - [From Docker](#from-docker)
+2. [Usage](#usage)
+    - [Environment Variables](#environment-variables)
+    - [Delegated Signing Mode](#delegated-signing-mode)
+    - [Sub-account Switching](#sub-account-switching)
+3. [API Examples](#api-examples)
+    - [HTTP API](#http-api)
+      - [`GET` Market Info](#get-market-info)
+      - [`GET` Orderbook](#get-orderbook)
+      - [`GET` Orders](#get-orders)
+      - [`GET` Positions](#get-positions)
+      - [`GET` Perp Position Info](#get-position-info-perps-only)
+      - [`GET` Transaction Events](#get-transaction-events)
+      - [`GET` SOL Balance](#get-sol-balance)
+      - [`POST` Place Orders](#place-orders)
+      - [`PATCH` Modify Orders](#modify-orders)
+      - [`DELETE` Cancel Orders](#cancel-orders)
+      - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
+    - [Websocket API](#websocket-api)
+      - [Subscribing](#subscribing)
+      - [Event Payloads](#event-payloads)
 
 ## Build & Run
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
 
+### From Source
+
+Build:
+
 supports rust <= 1.76.0
 
 ```bash
-# build
+# make a release build from source
 cargo build --release
+```
 
+Run:
+
+```bash
 # configure the gateway signing key
 export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
 
@@ -49,14 +57,31 @@ drift-gateway --dev https://api.devnet.solana.com
 drift-gateway https://rpc-provider.example.com
 ```
 
-with docker
+### From Docker
+
+Build the Docker image:
 
 ```bash
 docker build -f Dockerfile . -t drift-gateway
+```
+
+Run the image:
+
+```bash
 docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
 ```
 
 ## Usage
+
+⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
+
+### Environment Variables
+
+These runtime environment variables are required:
+
+| Variable            | Description                               | Example Value                |
+|---------------------|-------------------------------------------|------------------------------|
+| `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair | `</PATH/TO/KEY.json>` or `seedBase58` |
 
 ```bash
 Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
@@ -332,7 +357,7 @@ get extended position info for perps positions
 $ curl localhost:8080/v2/positionInfo/0
 ```
 
-note: 
+note:
 - `unrealizedPnL` is based on the oracle price at time of query
 - `unsettledPnl` does not include unsettled funding amounts
 
@@ -403,9 +428,7 @@ A response for a transaction that was found, but doesn't contain any events for 
 ```
 
 ### Get SOL balance
-
-Return the SOL balance of the transaction signer
-
+Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
 ```bash
 $ curl localhost:8080/v2/balance
 ```
