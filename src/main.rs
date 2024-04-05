@@ -612,9 +612,4 @@ mod tests {
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }
-
-    #[actix_web::test]
-    async fn place_orders() {
-
-    }
 }

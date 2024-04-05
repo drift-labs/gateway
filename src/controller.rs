@@ -10,7 +10,7 @@ use drift_sdk::{
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{debug, info, warn};
+use log::{debug, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
@@ -347,7 +347,7 @@ impl AppState {
         );
 
         let priority_fee = ctx.cu_price.unwrap_or(pf);
-        info!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
+        debug!(target: LOG_TARGET, "priority fee: {priority_fee:?}");
 
         let orders = req
             .orders
