@@ -121,9 +121,11 @@ A `subAccountId` URL query parameter may be supplied to switch the sub-account p
 
 e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
 
-## CU Limits
+## CU Price & Limits
 
-CU limit may be set on transaction request with the query parameter `computeUnitLimit=300000`, the default if unset is `200000`.
+**CU limit** may be set on transaction request with the query parameter `computeUnitLimit=300000`, the default if unset is `200000`.
+
+**CU price** in micro-lamports may be set on transaction request with the query parameter `computeUnitPrice=1000`, the default if unset is a dynamic value from chain set at 90-th percentile of the local fee market.  
 
 The following error is logged when a tx does not have enough CU limit, increasing the cu limit can fix it or reducing number complexity of the order e..g number of orders/markets per batch.
 
@@ -134,12 +136,10 @@ The following error is logged when a tx does not have enough CU limit, increasin
 **example request**
 
 ```bash
-$ curl 'localhost:8080/v2/orders?computeUnitLimit=300000' -X POST \
+$ curl 'localhost:8080/v2/orders?computeUnitLimit=300000&computeUnitPrice=1000' -X POST \
 -H 'content-type: application/json' \
 -d # { order data ...}
 ```
-
-The CU price (aka priority fee) is automatically inferred from onchain fee data at 75th percentile.
 
 ## API Examples
 

@@ -4,18 +4,18 @@ use drift_sdk::{
     event_subscriber::{try_parse_log, CommitmentConfig},
     math::liquidation::calculate_liquidation_price_and_unrealized_pnl,
     types::{
-        Context, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
+        self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
     },
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
-use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
+use std::{borrow::Cow, str::FromStr, sync::Arc};
 use thiserror::Error;
 
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
         TxEventsResponse, TxResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
-    LOG_TARGET,
+    Context, LOG_TARGET,
 };
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -84,9 +84,9 @@ impl AppState {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
         let context = if devnet {
-            Context::DevNet
+            types::Context::DevNet
         } else {
-            Context::MainNet
+            types::Context::MainNet
         };
 
         let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
@@ -132,22 +132,23 @@ impl AppState {
     /// 4) catch all. cancel all orders
     pub async fn cancel_orders(
         &self,
+        ctx: Context,
         req: CancelOrdersRequest,
-        sub_account_id: Option<u16>,
-        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
         );
+        let priority_fee = ctx.cu_price.unwrap_or(pf);
+        debug!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, cu_limit);
+        .with_priority_fee(priority_fee, ctx.cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
         self.send_tx(tx, "cancel_orders").await
     }
@@ -155,12 +156,12 @@ impl AppState {
     /// Return orders by position if given, otherwise return all positions
     pub async fn get_positions(
         &self,
+        ctx: Context,
         req: Option<GetPositionsRequest>,
-        sub_account_id: Option<u16>,
     ) -> GatewayResult<GetPositionsResponse> {
         let (all_spot, all_perp) = self
             .client
-            .all_positions(&self.resolve_sub_account(sub_account_id))
+            .all_positions(&self.resolve_sub_account(ctx.sub_account_id))
             .await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
@@ -204,10 +205,10 @@ impl AppState {
 
     pub async fn get_position_extended(
         &self,
-        sub_account_id: Option<u16>,
+        ctx: Context,
         market: Market,
     ) -> GatewayResult<PerpPosition> {
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let (perp_position, user, oracle) = tokio::join!(
             self.client.perp_position(&sub_account, market.market_index),
             self.client.get_user_account(&sub_account),
@@ -247,10 +248,10 @@ impl AppState {
     /// Return orders by market if given, otherwise return all orders
     pub async fn get_orders(
         &self,
+        ctx: Context,
         req: Option<GetOrdersRequest>,
-        sub_account_id: Option<u16>,
     ) -> GatewayResult<GetOrdersResponse> {
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let orders = self.client.all_orders(&sub_account).await?;
         Ok(GetOrdersResponse {
             orders: orders
@@ -299,9 +300,8 @@ impl AppState {
 
     pub async fn cancel_and_place_orders(
         &self,
+        ctx: Context,
         req: CancelAndPlaceRequest,
-        sub_account_id: Option<u16>,
-        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
         let orders = req
             .place
@@ -313,7 +313,7 @@ impl AppState {
             })
             .collect();
 
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -325,7 +325,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, cu_limit);
+        .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
 
         let builder = build_cancel_ix(builder, req.cancel)?;
         let tx = build_modify_ix(builder, req.modify, self.client.program_data())?
@@ -337,15 +337,17 @@ impl AppState {
 
     pub async fn place_orders(
         &self,
+        ctx: Context,
         req: PlaceOrdersRequest,
-        sub_account_id: Option<u16>,
-        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
         );
+
+        let priority_fee = ctx.cu_price.unwrap_or(pf);
+        info!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
 
         let orders = req
             .orders
@@ -361,7 +363,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, cu_limit)
+        .with_priority_fee(priority_fee, ctx.cu_limit)
         .place_orders(orders)
         .build();
 
@@ -370,11 +372,10 @@ impl AppState {
 
     pub async fn modify_orders(
         &self,
+        ctx: Context,
         req: ModifyOrdersRequest,
-        sub_account_id: Option<u16>,
-        cu_limit: Option<u32>,
     ) -> GatewayResult<TxResponse> {
-        let sub_account = self.resolve_sub_account(sub_account_id);
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let (account_data, pf) = tokio::join!(
             self.client.get_user_account(&sub_account),
             get_priority_fee(&self.client)
@@ -386,7 +387,7 @@ impl AppState {
             Cow::Owned(account_data?),
             self.delegated,
         )
-        .with_priority_fee(pf, cu_limit);
+        .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders").await
     }
@@ -402,8 +403,8 @@ impl AppState {
 
     pub async fn get_tx_events_for_subaccount_id(
         &self,
+        ctx: Context,
         tx_sig: &str,
-        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxEventsResponse> {
         let signature = Signature::from_str(tx_sig).map_err(|err| {
             warn!(target: LOG_TARGET, "failed to parse transaction signature: {err:?}");
@@ -432,7 +433,7 @@ impl AppState {
                 if let Some(meta) = tx.transaction.meta {
                     match meta.log_messages {
                         OptionSerializer::Some(logs) => {
-                            let sub_account = self.resolve_sub_account(sub_account_id);
+                            let sub_account = self.resolve_sub_account(ctx.sub_account_id);
                             for (tx_idx, log) in logs.iter().enumerate() {
                                 if let Some(evt) = try_parse_log(log.as_str(), tx_sig, tx_idx) {
                                     let (_, gw_event) = map_drift_event_for_account(
@@ -508,7 +509,6 @@ impl AppState {
         let client = Arc::clone(&self.client);
         let commitment = self.tx_commitment.commitment;
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(200)).await;
             if let Err(err) = client
                 .inner()
                 .send_transaction_with_config(
@@ -641,7 +641,7 @@ async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
         .await
     {
         recent_fees.sort_unstable();
-        let idx = (recent_fees.len() * 3) / 4; // 75-th percentile
+        let idx = (recent_fees.len() * 90) / 100; // 90-th percentile
         priority_fee = recent_fees[idx];
     } else {
         warn!(target: "controller", "failed to fetch live priority fee");
@@ -660,7 +660,7 @@ mod tests {
         // flakey needs a mainnet RPC getProgramAccounts
         let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com");
         let client = DriftClient::new(
-            Context::DevNet,
+            types::Context::DevNet,
             account_provider,
             Wallet::read_only(Pubkey::new_unique()),
         )
