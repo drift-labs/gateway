@@ -23,12 +23,15 @@ mod websocket;
 
 pub const LOG_TARGET: &str = "gateway";
 
-#[derive(serde::Deserialize)]
-struct Args {
+/// Request context
+#[derive(serde::Deserialize, Default)]
+struct Context {
     #[serde(default, rename = "subAccountId")]
-    sub_account_id: Option<u16>,
+    pub sub_account_id: Option<u16>,
     #[serde(default, rename = "computeUnitLimit")]
-    cu_limit: Option<u32>,
+    pub cu_limit: Option<u32>,
+    #[serde(default, rename = "computeUnitPrice")]
+    pub cu_price: Option<u64>,
 }
 
 #[get("/markets")]
@@ -46,7 +49,7 @@ async fn get_market_info(controller: web::Data<AppState>, path: web::Path<u16>) 
 async fn get_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     let mut req = None;
     if !body.is_empty() {
@@ -56,23 +59,19 @@ async fn get_orders(
         }
     };
 
-    handle_result(controller.get_orders(req, args.sub_account_id).await)
+    handle_result(controller.get_orders(ctx.0, req).await)
 }
 
 #[post("/orders")]
 async fn create_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, PlaceOrdersRequest>(body.as_ref()) {
         Ok(req) => {
             debug!(target: LOG_TARGET, "request: {req:?}");
-            handle_result(
-                controller
-                    .place_orders(req, args.sub_account_id, args.cu_limit)
-                    .await,
-            )
+            handle_result(controller.place_orders(ctx.0, req).await)
         }
         Err(err) => handle_deser_error(err),
     }
@@ -82,16 +81,12 @@ async fn create_orders(
 async fn modify_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, ModifyOrdersRequest>(body.as_ref()) {
         Ok(req) => {
             debug!(target: LOG_TARGET, "request: {req:?}");
-            handle_result(
-                controller
-                    .modify_orders(req, args.sub_account_id, args.cu_limit)
-                    .await,
-            )
+            handle_result(controller.modify_orders(ctx.0, req).await)
         }
         Err(err) => handle_deser_error(err),
     }
@@ -101,7 +96,7 @@ async fn modify_orders(
 async fn cancel_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     let mut req = CancelOrdersRequest::default();
     // handle the body manually to allow empty payload `Json` requires some body is set
@@ -112,27 +107,19 @@ async fn cancel_orders(
         }
     };
     debug!(target: LOG_TARGET, "request: {req:?}");
-    handle_result(
-        controller
-            .cancel_orders(req, args.sub_account_id, args.cu_limit)
-            .await,
-    )
+    handle_result(controller.cancel_orders(ctx.0, req).await)
 }
 
 #[post("/orders/cancelAndPlace")]
 async fn cancel_and_place_orders(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     match serde_json::from_slice::<'_, CancelAndPlaceRequest>(body.as_ref()) {
         Ok(req) => {
             debug!(target: LOG_TARGET, "request: {req:?}");
-            handle_result(
-                controller
-                    .cancel_and_place_orders(req, args.sub_account_id, args.cu_limit)
-                    .await,
-            )
+            handle_result(controller.cancel_and_place_orders(ctx.0, req).await)
         }
         Err(err) => handle_deser_error(err),
     }
@@ -142,7 +129,7 @@ async fn cancel_and_place_orders(
 async fn get_positions(
     controller: web::Data<AppState>,
     body: web::Bytes,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     let mut req = None;
     // handle the body manually to allow empty payload `Json` requires some body is set
@@ -153,19 +140,19 @@ async fn get_positions(
         }
     };
 
-    handle_result(controller.get_positions(req, args.sub_account_id).await)
+    handle_result(controller.get_positions(ctx.0, req).await)
 }
 
 #[get("/positionInfo/{index}")]
 async fn get_positions_extended(
     controller: web::Data<AppState>,
     path: web::Path<u16>,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     let index = path.into_inner();
     handle_result(
         controller
-            .get_position_extended(args.sub_account_id, Market::perp(index))
+            .get_position_extended(ctx.0, Market::perp(index))
             .await,
     )
 }
@@ -187,12 +174,12 @@ async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
 async fn get_tx_events(
     controller: web::Data<AppState>,
     path: web::Path<String>,
-    args: web::Query<Args>,
+    ctx: web::Query<Context>,
 ) -> impl Responder {
     let tx_sig = path.into_inner();
     handle_result(
         controller
-            .get_tx_events_for_subaccount_id(tx_sig.as_str(), args.sub_account_id)
+            .get_tx_events_for_subaccount_id(ctx.0, tx_sig.as_str())
             .await,
     )
 }
