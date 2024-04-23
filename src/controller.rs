@@ -93,6 +93,7 @@ impl AppState {
         let client = DriftClient::new(context, account_provider, wallet.clone())
             .await
             .expect("ok");
+        client.subscribe().await.expect("subd onchain data");
 
         let dlob_endpoint = if devnet {
             "https://master.dlob.drift.trade"
