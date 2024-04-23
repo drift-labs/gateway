@@ -221,8 +221,7 @@ impl AppState {
                 &self.client,
                 &user?,
                 market.market_index,
-            )
-            .await?;
+            )?;
             let oracle_price = oracle?;
             let unsettled_pnl = Decimal::new(
                 perp_position
