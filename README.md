@@ -19,6 +19,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`GET` Perp Position Info](#get-position-info-perps-only)
       - [`GET` Transaction Events](#get-transaction-events)
       - [`GET` SOL Balance](#get-sol-balance)
+      - [`GET` Margin Info](#get-margin-info)
       - [`POST` Place Orders](#place-orders)
       - [`PATCH` Modify Orders](#modify-orders)
       - [`DELETE` Cancel Orders](#cancel-orders)
@@ -189,6 +190,22 @@ $ curl localhost:8080/v2/markets
     }
     // ...
   ]
+}
+```
+
+## Get Margin Info
+Returns the account margin requirements
+
+```bash
+$ curl localhost:8080/v2/user/marginInfo
+```
+
+**Response**
+
+```json
+{
+  "initial": "141.414685",
+  "maintenance": "132.522189"
 }
 ```
 
