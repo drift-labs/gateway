@@ -2,7 +2,9 @@ use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     dlob_client::DLOBClient,
     event_subscriber::{try_parse_log, CommitmentConfig},
-    math::liquidation::calculate_liquidation_price_and_unrealized_pnl,
+    math::liquidation::{
+        calculate_liquidation_price_and_unrealized_pnl, calculate_margin_requirements,
+    },
     types::{
         self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
         SdkResult, VersionedMessage,
@@ -24,7 +26,7 @@ use crate::{
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
         GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, OrderbookL2,
         PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, PRICE_DECIMALS,
+        TxEventsResponse, TxResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -202,6 +204,16 @@ impl AppState {
                 .map(|x| (*x).into())
                 .collect(),
         })
+    }
+
+    pub async fn get_margin_info(&self, ctx: Context) -> GatewayResult<UserMarginResponse> {
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+        calculate_margin_requirements(
+            &self.client,
+            &self.client.get_user_account(&sub_account).await?,
+        )
+        .map(Into::into)
+        .map_err(|err| ControllerError::Sdk(err))
     }
 
     pub async fn get_position_extended(
