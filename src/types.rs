@@ -5,6 +5,7 @@
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob_client::{L2Level, L2Orderbook},
+    math::liquidation::MarginRequirementInfo,
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
@@ -596,6 +597,23 @@ pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) ->
 #[derive(Serialize, Debug)]
 pub struct SolBalanceResponse {
     pub balance: Decimal,
+}
+
+#[derive(Serialize, Debug)]
+pub struct UserMarginResponse {
+    pub initial: Decimal,
+    pub maintenance: Decimal,
+}
+
+impl From<MarginRequirementInfo> for UserMarginResponse {
+    fn from(value: MarginRequirementInfo) -> Self {
+        Self {
+            initial: Decimal::from_i128_with_scale(value.initial as i128, PRICE_DECIMALS)
+                .normalize(),
+            maintenance: Decimal::from_i128_with_scale(value.maintenance as i128, PRICE_DECIMALS)
+                .normalize(),
+        }
+    }
 }
 
 #[cfg(test)]
