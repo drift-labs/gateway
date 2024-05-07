@@ -2,6 +2,8 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
+use drift_sdk::constants::QUOTE_PRECISION;
+use drift_sdk::math::liquidation::CollateralInfo;
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
     dlob_client::{L2Level, L2Orderbook},
@@ -18,6 +20,7 @@ use crate::websocket::AccountEvent;
 
 /// decimal places in price values
 pub const PRICE_DECIMALS: u32 = PRICE_PRECISION.ilog10();
+pub const QUOTE_DECIMALS: u32 = QUOTE_PRECISION.ilog10();
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -625,6 +628,21 @@ impl From<u128> for UserLeverageResponse {
     fn from(value: u128) -> Self {
         Self {
             leverage: Decimal::from_i128_with_scale(value as i128, PRICE_DECIMALS).normalize(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct UserCollateralResponse {
+    pub total: Decimal,
+    pub free: Decimal,
+}
+
+impl From<CollateralInfo> for UserCollateralResponse {
+    fn from(value: CollateralInfo) -> Self {
+        Self {
+            total: Decimal::from_i128_with_scale(value.total, QUOTE_DECIMALS).normalize(),
+            free: Decimal::from_i128_with_scale(value.free, QUOTE_DECIMALS).normalize(),
         }
     }
 }

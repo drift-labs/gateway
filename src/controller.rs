@@ -4,7 +4,8 @@ use drift_sdk::{
     dlob_client::DLOBClient,
     event_subscriber::{try_parse_log, CommitmentConfig},
     math::liquidation::{
-        calculate_liquidation_price_and_unrealized_pnl, calculate_margin_requirements,
+        calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
+        calculate_margin_requirements, MarginCategory,
     },
     types::{
         self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
@@ -21,13 +22,14 @@ use solana_transaction_status::{option_serializer::OptionSerializer, UiTransacti
 use std::{borrow::Cow, str::FromStr, sync::Arc};
 use thiserror::Error;
 
+use crate::types::UserCollateralResponse;
 use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
         GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, OrderbookL2,
         PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, UserMarginResponse, UserLeverageResponse, PRICE_DECIMALS,
+        TxEventsResponse, TxResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -222,6 +224,21 @@ impl AppState {
         get_leverage(
             &self.client,
             &self.client.get_user_account(&sub_account).await?,
+        )
+        .map(Into::into)
+        .map_err(|err| ControllerError::Sdk(err))
+    }
+
+    pub async fn get_collateral(
+        &self,
+        ctx: Context,
+        margin_category: Option<MarginCategory>,
+    ) -> GatewayResult<UserCollateralResponse> {
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+        calculate_collateral(
+            &self.client,
+            &self.client.get_user_account(&sub_account).await?,
+            margin_category.unwrap_or(MarginCategory::Maintenance),
         )
         .map(Into::into)
         .map_err(|err| ControllerError::Sdk(err))

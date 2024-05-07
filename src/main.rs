@@ -197,6 +197,14 @@ async fn get_leverage(controller: web::Data<AppState>, ctx: web::Query<Context>)
     handle_result(controller.get_leverage(ctx.0).await)
 }
 
+#[get("/collateral")]
+async fn get_collateral(
+    controller: web::Data<AppState>,
+    ctx: web::Query<Context>,
+) -> impl Responder {
+    handle_result(controller.get_collateral(ctx.0, None).await)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -283,7 +291,8 @@ async fn main() -> std::io::Result<()> {
                     .service(get_tx_events)
                     .service(get_market_info)
                     .service(get_margin_info)
-                    .service(get_leverage),
+                    .service(get_leverage)
+                    .service(get_collateral),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))

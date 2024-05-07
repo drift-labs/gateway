@@ -21,6 +21,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`GET` SOL Balance](#get-sol-balance)
       - [`GET` Margin Info](#get-margin-info)
       - [`GET` Leverage](#get-leverage)
+      - [`GET` Collateral](#get-collateral)
       - [`POST` Place Orders](#place-orders)
       - [`PATCH` Modify Orders](#modify-orders)
       - [`DELETE` Cancel Orders](#cancel-orders)
@@ -222,6 +223,22 @@ $ curl localhost:8080/v2/leverage
 ```json
 {
    "leverage" : "0.094489"
+}
+```
+
+## Get Collateral
+Returns the account's maintenance collateral
+
+```bash
+$ curl localhost:8080/v2/collateral
+```
+
+**Response**
+
+```json
+{
+   "total":"1661.195815",
+   "free":"1653.531255"
 }
 ```
 
