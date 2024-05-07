@@ -616,6 +616,19 @@ impl From<MarginRequirementInfo> for UserMarginResponse {
     }
 }
 
+#[derive(Serialize, Debug)]
+pub struct UserLeverageResponse {
+    pub leverage: Decimal,
+}
+
+impl From<u128> for UserLeverageResponse {
+    fn from(value: u128) -> Self {
+        Self {
+            leverage: Decimal::from_i128_with_scale(value as i128, PRICE_DECIMALS).normalize(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use drift_sdk::{

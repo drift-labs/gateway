@@ -192,6 +192,11 @@ async fn get_margin_info(
     handle_result(controller.get_margin_info(ctx.0).await)
 }
 
+#[get("/leverage")]
+async fn get_leverage(controller: web::Data<AppState>, ctx: web::Query<Context>) -> impl Responder {
+    handle_result(controller.get_leverage(ctx.0).await)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -277,7 +282,8 @@ async fn main() -> std::io::Result<()> {
                     .service(get_positions_extended)
                     .service(get_tx_events)
                     .service(get_market_info)
-                    .service(get_margin_info),
+                    .service(get_margin_info)
+                    .service(get_leverage),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
