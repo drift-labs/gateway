@@ -10,7 +10,7 @@ use drift_sdk::{
     Pubkey, Wallet,
 };
 use futures_util::{SinkExt, StreamExt};
-use log::{info, warn};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::json;
@@ -61,7 +61,7 @@ async fn accept_connection(
     info!(target: LOG_TARGET, "accepted Ws connection: {}", addr);
 
     let (mut ws_out, mut ws_in) = ws_stream.split();
-    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Message>(32);
+    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Message>(64);
     let subscriptions = Arc::new(Mutex::new(HashMap::<u8, JoinHandle<()>>::default()));
 
     // writes messages to the connection
@@ -69,6 +69,7 @@ async fn accept_connection(
         while let Some(msg) = message_rx.recv().await {
             if msg.is_close() {
                 let _ = ws_out.close().await;
+                debug!(target: LOG_TARGET, "closing Ws connection (send half): {}", addr);
                 break;
             }
             ws_out.send(msg).await.expect("sent");
@@ -135,10 +136,11 @@ async fn accept_connection(
                                             .await
                                             .is_err()
                                         {
+                                            warn!(target: LOG_TARGET, "failed sending Ws message: {}", addr);
                                             break;
                                         }
                                     }
-                                    warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}, sending close");
+                                    warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}");
                                     subscription_map.lock().await.remove(&sub_account_id);
                                 }
                             });
@@ -169,6 +171,7 @@ async fn accept_connection(
                 }
             },
             Message::Close(frame) => {
+                info!(target: LOG_TARGET, "received Ws close: {}", addr);
                 let _ = message_tx.send(Message::Close(frame)).await;
                 break;
             }
