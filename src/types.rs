@@ -152,8 +152,9 @@ impl PerpPosition {
 impl From<sdk_types::PerpPosition> for PerpPosition {
     fn from(value: sdk_types::PerpPosition) -> Self {
         let amount = Decimal::new(value.base_asset_amount, BASE_PRECISION.ilog10());
-        let average_entry =
-            Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS) / amount.abs();
+        let average_entry = Decimal::new(value.quote_entry_amount.abs(), PRICE_DECIMALS)
+            .checked_div(amount.abs())
+            .unwrap_or_default();
 
         Self {
             amount: amount.normalize(),
