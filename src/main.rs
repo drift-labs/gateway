@@ -420,7 +420,7 @@ mod tests {
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
+        AppState::new(TEST_ENDPOINT, true, wallet, None, None, false).await
     }
 
     #[actix_web::test]
