@@ -105,6 +105,7 @@ Options:
   --commitment                    solana commitment level for state updates [processed|confirmed|finalized] (default: confirmed)
   --default-sub-account-id        default sub-account ID for account related operations (default: 0)
   --verbose                       enable debug logging
+  --skip-tx-preflight             skip tx preflight checks
 ```
 
 ### Delegated Signing Mode

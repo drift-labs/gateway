@@ -60,6 +60,8 @@ pub struct AppState {
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
     default_subaccount_id: u16,
+    /// skip tx preflight on send or not (default: false)
+    skip_tx_preflight: bool,
 }
 
 impl AppState {
@@ -85,6 +87,7 @@ impl AppState {
         wallet: Wallet,
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
         default_subaccount_id: Option<u16>,
+        skip_tx_preflight: bool,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -113,6 +116,7 @@ impl AppState {
             dlob_client: DLOBClient::new(dlob_endpoint),
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
+            skip_tx_preflight,
         }
     }
 
@@ -519,17 +523,16 @@ impl AppState {
             .await
             .map_err(SdkError::from)?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
+        let tx_config = RpcSendTransactionConfig {
+            max_retries: Some(0),
+            preflight_commitment: Some(self.tx_commitment.commitment),
+            skip_preflight: self.skip_tx_preflight,
+            ..Default::default()
+        };
         let result = self
             .client
             .inner()
-            .send_transaction_with_config(
-                &tx,
-                RpcSendTransactionConfig {
-                    max_retries: Some(0),
-                    preflight_commitment: Some(self.tx_commitment.commitment),
-                    ..Default::default()
-                },
-            )
+            .send_transaction_with_config(&tx, tx_config)
             .await
             .map(|s| {
                 debug!(target: LOG_TARGET, "sent tx ({reason}): {s}");
@@ -547,18 +550,10 @@ impl AppState {
 
         // double send the tx to help chances of landing
         let client = Arc::clone(&self.client);
-        let commitment = self.tx_commitment.commitment;
         tokio::spawn(async move {
             if let Err(err) = client
                 .inner()
-                .send_transaction_with_config(
-                    &tx,
-                    RpcSendTransactionConfig {
-                        max_retries: Some(0),
-                        preflight_commitment: Some(commitment),
-                        ..Default::default()
-                    },
-                )
+                .send_transaction_with_config(&tx, tx_config)
                 .await
             {
                 warn!(target: LOG_TARGET, "retry tx failed: {err:?}");

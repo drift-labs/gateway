@@ -235,6 +235,7 @@ async fn main() -> std::io::Result<()> {
         wallet,
         Some((state_commitment, tx_commitment)),
         Some(config.default_sub_account_id),
+        config.skip_tx_preflight,
     )
     .await;
 
@@ -387,9 +388,12 @@ struct GatewayConfig {
     /// default sub_account_id to use (default: 0)
     #[argh(option, default = "0")]
     default_sub_account_id: u16,
-    #[argh(switch)]
     /// enable debug logging
+    #[argh(switch)]
     verbose: bool,
+    /// skip tx preflight checks
+    #[argh(switch)]
+    skip_tx_preflight: bool,
 }
 
 #[cfg(test)]
@@ -416,7 +420,7 @@ mod tests {
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None, None).await
+        AppState::new(TEST_ENDPOINT, true, wallet, None, None, false).await
     }
 
     #[actix_web::test]
