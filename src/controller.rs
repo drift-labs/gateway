@@ -523,18 +523,16 @@ impl AppState {
             .await
             .map_err(SdkError::from)?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
+        let tx_config = RpcSendTransactionConfig {
+            max_retries: Some(0),
+            preflight_commitment: Some(self.tx_commitment.commitment),
+            skip_preflight: self.skip_tx_preflight,
+            ..Default::default()
+        };
         let result = self
             .client
             .inner()
-            .send_transaction_with_config(
-                &tx,
-                RpcSendTransactionConfig {
-                    max_retries: Some(0),
-                    preflight_commitment: Some(self.tx_commitment.commitment),
-                    skip_preflight: self.skip_tx_preflight,
-                    ..Default::default()
-                },
-            )
+            .send_transaction_with_config(&tx, tx_config)
             .await
             .map(|s| {
                 debug!(target: LOG_TARGET, "sent tx ({reason}): {s}");
@@ -552,18 +550,10 @@ impl AppState {
 
         // double send the tx to help chances of landing
         let client = Arc::clone(&self.client);
-        let commitment = self.tx_commitment.commitment;
         tokio::spawn(async move {
             if let Err(err) = client
                 .inner()
-                .send_transaction_with_config(
-                    &tx,
-                    RpcSendTransactionConfig {
-                        max_retries: Some(0),
-                        preflight_commitment: Some(commitment),
-                        ..Default::default()
-                    },
-                )
+                .send_transaction_with_config(&tx, tx_config)
                 .await
             {
                 warn!(target: LOG_TARGET, "retry tx failed: {err:?}");
