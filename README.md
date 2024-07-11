@@ -65,6 +65,9 @@ drift-gateway https://rpc-provider.example.com
 Build the Docker image:
 
 ```bash
+# NOTE: '--platform linux/x86_64' ensures the correct memory layout at runtime
+# for solana program data types
+
 docker build -f Dockerfile . -t drift-gateway --platform linux/x86_64
 ```
 
