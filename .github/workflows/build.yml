@@ -49,4 +49,5 @@ jobs:
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
-        run: cargo test --all
+        # limit test parallelism to prevent hitting RPC rate-limits
+        run: cargo test --all -- --test-threads=2
