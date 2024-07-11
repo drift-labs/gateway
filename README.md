@@ -65,7 +65,7 @@ drift-gateway https://rpc-provider.example.com
 Build the Docker image:
 
 ```bash
-docker build -f Dockerfile . -t drift-gateway
+docker build -f Dockerfile . -t drift-gateway --platform linux/x86_64
 ```
 
 Run the image:
