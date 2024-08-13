@@ -8,7 +8,7 @@ actix-web = "4.4.0"
 # pinned to match drift program version
 anchor-lang = "=0.29.0"
 argh = "0.1.12"
-drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "45021df" }
+drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "aedf04a" }
 env_logger = "0.10.1"
 futures-util = "0.3.29"
 log = "0.4.20"
