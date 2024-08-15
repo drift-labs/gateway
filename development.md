@@ -1,6 +1,6 @@
 # Rust version
 
-`rustup default 1.73.0-x86_64-apple-darwin` works. Need >=1.73.0 for `bumpalo v3.15.3`
+`rustup default 1.76.0-x86_64-apple-darwin` works. Need <=1.76.0`
 
 
 # Tests

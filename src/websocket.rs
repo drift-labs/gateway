@@ -68,6 +68,7 @@ async fn accept_connection(
     tokio::spawn(async move {
         while let Some(msg) = message_rx.recv().await {
             if msg.is_close() {
+                let _ = ws_out.send(msg).await;
                 let _ = ws_out.close().await;
                 debug!(target: LOG_TARGET, "closing Ws connection (send half): {}", addr);
                 break;
@@ -104,44 +105,49 @@ async fn accept_connection(
                             let join_handle = tokio::spawn({
                                 let sub_account_address =
                                     wallet.sub_account(request.sub_account_id as u16);
-                                let mut event_stream = EventSubscriber::subscribe(
-                                    ws_endpoint.as_str(),
-                                    sub_account_address,
-                                    retry_policy::forever(5),
-                                )
-                                .await
-                                .expect("ws connects");
                                 let subscription_map = Arc::clone(&subscriptions);
                                 let sub_account_id = request.sub_account_id;
                                 let message_tx = message_tx.clone();
+                                let ws_endpoint = ws_endpoint.clone();
+
                                 async move {
-                                    while let Some(ref update) = event_stream.next().await {
-                                        let (channel, data) = map_drift_event_for_account(
-                                            program_data,
-                                            update,
+                                    loop {
+                                        let mut event_stream = EventSubscriber::subscribe(
+                                            ws_endpoint.as_str(),
                                             sub_account_address,
-                                        );
-                                        if data.is_none() {
-                                            continue;
+                                            retry_policy::forever(5),
+                                        )
+                                        .await
+                                        .expect("ws connects");
+                                        debug!(target: LOG_TARGET, "event stream connected: {sub_account_id:?}");
+                                        while let Some(ref update) = event_stream.next().await {
+                                            let (channel, data) = map_drift_event_for_account(
+                                                program_data,
+                                                update,
+                                                sub_account_address,
+                                            );
+                                            if data.is_none() {
+                                                continue;
+                                            }
+                                            if message_tx
+                                                .send(Message::text(
+                                                    serde_json::to_string(&WsEvent {
+                                                        data,
+                                                        channel,
+                                                        sub_account_id,
+                                                    })
+                                                    .expect("serializes"),
+                                                ))
+                                                .await
+                                                .is_err()
+                                            {
+                                                warn!(target: LOG_TARGET, "failed sending Ws message: {}", addr);
+                                                break;
+                                            }
                                         }
-                                        if message_tx
-                                            .send(Message::text(
-                                                serde_json::to_string(&WsEvent {
-                                                    data,
-                                                    channel,
-                                                    sub_account_id,
-                                                })
-                                                .expect("serializes"),
-                                            ))
-                                            .await
-                                            .is_err()
-                                        {
-                                            warn!(target: LOG_TARGET, "failed sending Ws message: {}", addr);
-                                            break;
-                                        }
+                                        warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}, reconnecting...");
+                                        subscription_map.lock().await.remove(&sub_account_id);
                                     }
-                                    warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}");
-                                    subscription_map.lock().await.remove(&sub_account_id);
                                 }
                             });
 
@@ -330,14 +336,14 @@ impl AccountEvent {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-enum Side {
+pub(crate) enum Side {
     Buy,
     Sell,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct OrderWithDecimals {
+pub(crate) struct OrderWithDecimals {
     /// The slot the order was placed
     pub slot: u64,
     /// The limit price for the order (can be 0 for market orders)
@@ -659,172 +665,6 @@ pub(crate) fn map_drift_event_for_account(
                 signature: signature.to_string(),
                 tx_idx: *tx_idx,
             }),
-        ),
-    }
-}
-
-/// Map drift-program events into gateway friendly types. Includes all events involved, not only
-/// those pertaining to a specific UserAccount
-pub(crate) fn map_drift_events(
-    program_data: &ProgramData,
-    event: &DriftEvent,
-) -> (Channel, Vec<AccountEvent>) {
-    match event {
-        DriftEvent::OrderFill {
-            maker,
-            maker_fee,
-            maker_order_id,
-            maker_side,
-            taker,
-            taker_fee,
-            taker_order_id,
-            taker_side,
-            base_asset_amount_filled,
-            quote_asset_amount_filled,
-            oracle_price,
-            market_index,
-            market_type,
-            signature,
-            tx_idx,
-            ts,
-        } => {
-            let decimals =
-                get_market_decimals(program_data, Market::new(*market_index, *market_type));
-
-            (
-                Channel::Fills,
-                vec![
-                    AccountEvent::fill(
-                        maker_side.unwrap(),
-                        *maker_fee,
-                        *base_asset_amount_filled,
-                        *quote_asset_amount_filled,
-                        *oracle_price,
-                        *maker_order_id,
-                        *ts,
-                        decimals,
-                        signature,
-                        *tx_idx,
-                        *market_index,
-                        *market_type,
-                        (*maker).map(|x| x.to_string()),
-                        Some(*maker_order_id),
-                        Some(*maker_fee),
-                        (*taker).map(|x| x.to_string()),
-                        Some(*taker_order_id),
-                        Some(*taker_fee as i64),
-                    ),
-                    AccountEvent::fill(
-                        taker_side.unwrap(),
-                        *taker_fee as i64,
-                        *base_asset_amount_filled,
-                        *quote_asset_amount_filled,
-                        *oracle_price,
-                        *taker_order_id,
-                        *ts,
-                        decimals,
-                        signature,
-                        *tx_idx,
-                        *market_index,
-                        *market_type,
-                        (*maker).map(|x| x.to_string()),
-                        Some(*maker_order_id),
-                        Some(*maker_fee),
-                        (*taker).map(|x| x.to_string()),
-                        Some(*taker_order_id),
-                        Some(*taker_fee as i64),
-                    ),
-                ],
-            )
-        }
-        DriftEvent::OrderCancel {
-            taker: _,
-            maker,
-            taker_order_id,
-            maker_order_id,
-            signature,
-            tx_idx,
-            ts,
-        } => {
-            let order_id = if maker.is_some() {
-                maker_order_id
-            } else {
-                taker_order_id
-            };
-            (
-                Channel::Orders,
-                vec![AccountEvent::OrderCancel {
-                    order_id: *order_id,
-                    ts: *ts,
-                    signature: signature.to_string(),
-                    tx_idx: *tx_idx,
-                }],
-            )
-        }
-        DriftEvent::OrderCancelMissing {
-            order_id,
-            user_order_id,
-            signature,
-        } => (
-            Channel::Orders,
-            vec![AccountEvent::OrderCancelMissing {
-                user_order_id: *user_order_id,
-                order_id: *order_id,
-                signature: signature.to_string(),
-            }],
-        ),
-        DriftEvent::OrderExpire {
-            order_id,
-            fee,
-            ts,
-            signature,
-            ..
-        } => (
-            Channel::Orders,
-            vec![AccountEvent::OrderExpire {
-                order_id: *order_id,
-                fee: Decimal::new((*fee as i64).neg(), PRICE_DECIMALS),
-                ts: *ts,
-                signature: signature.to_string(),
-            }],
-        ),
-        DriftEvent::OrderCreate {
-            order,
-            ts,
-            signature,
-            tx_idx,
-            ..
-        } => {
-            let decimals = get_market_decimals(
-                program_data,
-                Market::new(order.market_index, order.market_type),
-            );
-            (
-                Channel::Orders,
-                vec![AccountEvent::OrderCreate {
-                    order: OrderWithDecimals::from_order(*order, decimals),
-                    ts: *ts,
-                    signature: signature.to_string(),
-                    tx_idx: *tx_idx,
-                }],
-            )
-        }
-        DriftEvent::FundingPayment {
-            amount,
-            market_index,
-            ts,
-            signature,
-            tx_idx,
-            ..
-        } => (
-            Channel::Funding,
-            vec![AccountEvent::FundingPayment {
-                amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
-                market_index: *market_index,
-                ts: *ts,
-                signature: signature.to_string(),
-                tx_idx: *tx_idx,
-            }],
         ),
     }
 }

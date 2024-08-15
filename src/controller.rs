@@ -220,7 +220,7 @@ impl AppState {
             &self.client.get_user_account(&sub_account).await?,
         )
         .map(Into::into)
-        .map_err(|err| ControllerError::Sdk(err))
+        .map_err(ControllerError::Sdk)
     }
 
     pub async fn get_leverage(&self, ctx: Context) -> GatewayResult<UserLeverageResponse> {
@@ -230,7 +230,7 @@ impl AppState {
             &self.client.get_user_account(&sub_account).await?,
         )
         .map(Into::into)
-        .map_err(|err| ControllerError::Sdk(err))
+        .map_err(ControllerError::Sdk)
     }
 
     pub async fn get_collateral(
@@ -245,7 +245,7 @@ impl AppState {
             margin_category.unwrap_or(MarginCategory::Maintenance),
         )
         .map(Into::into)
-        .map_err(|err| ControllerError::Sdk(err))
+        .map_err(ControllerError::Sdk)
     }
 
     pub async fn get_position_extended(
@@ -540,13 +540,9 @@ impl AppState {
             })
             .map_err(|err| {
                 warn!(target: LOG_TARGET, "sending tx ({reason}) failed: {err:?}");
+                // tx has some program/logic error, retry won't fix
                 handle_tx_err(err.into())
-            });
-
-        // tx has some program/logic error, retry won't fix
-        if let Err(ControllerError::TxFailed { .. }) = result {
-            return result;
-        }
+            })?;
 
         // double send the tx to help chances of landing
         let client = Arc::clone(&self.client);
@@ -560,7 +556,7 @@ impl AppState {
             }
         });
 
-        result
+        Ok(result)
     }
 }
 
