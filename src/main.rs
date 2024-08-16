@@ -13,8 +13,7 @@ use drift_sdk::{types::CommitmentConfig, Pubkey};
 use serde_json::json;
 use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
-    CancelAndPlaceRequest, CancelOrdersRequest, GetOrderbookRequest, Market, ModifyOrdersRequest,
-    PlaceOrdersRequest,
+    CancelAndPlaceRequest, CancelOrdersRequest, Market, ModifyOrdersRequest, PlaceOrdersRequest,
 };
 
 mod controller;
@@ -157,14 +156,6 @@ async fn get_positions_extended(
     )
 }
 
-#[get("/orderbook")]
-async fn get_orderbook(controller: web::Data<AppState>, body: web::Bytes) -> impl Responder {
-    match serde_json::from_slice::<'_, GetOrderbookRequest>(body.as_ref()) {
-        Ok(req) => handle_result(controller.get_orderbook(req).await),
-        Err(err) => handle_deser_error(err),
-    }
-}
-
 #[get("/balance")]
 async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
     handle_result(controller.get_sol_balance().await)
@@ -285,7 +276,6 @@ async fn main() -> std::io::Result<()> {
                     .service(create_orders)
                     .service(cancel_orders)
                     .service(modify_orders)
-                    .service(get_orderbook)
                     .service(cancel_and_place_orders)
                     .service(get_sol_balance)
                     .service(get_positions_extended)
@@ -475,27 +465,6 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success(), "{:?}", resp.into_body());
-    }
-
-    #[actix_web::test]
-    async fn get_orderbook_works() {
-        let controller = setup_controller(None).await;
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(controller))
-                .service(get_orderbook),
-        )
-        .await;
-        let req = test::TestRequest::default()
-            .method(Method::GET)
-            .uri("/orderbook")
-            .set_json(GetOrderbookRequest {
-                market: Market::perp(0), // sol-perp
-            })
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
     }
 
     #[actix_web::test]

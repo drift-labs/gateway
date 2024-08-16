@@ -265,49 +265,7 @@ $ curl localhost:8080/v2/marketInfo/0
 
 ### Get Orderbook
 
-gets a full snapshot of the current orderbook for a given market
-
-- `marketType` - "spot" or "perp
-
-```bash
-$ curl localhost:8080/v2/orderbook -X GET \
-  -H 'content-type: application/json' \
-  -d '{"marketIndex":0,"marketType":"perp"}'
-```
-
-**Response**
-
-```json
-{
-  "slot": 266118166,
-  "bids": [
-    {
-      "price": "53.616300",
-      "amount": "7.110000000"
-    },
-    {
-      "price": "47.014300",
-      "amount": "2.000000000"
-    },
-    {
-      "price": "20.879800",
-      "amount": "12.160000000"
-    }
-  ],
-  "asks": [
-    {
-      "price": "80.000000",
-      "amount": "1.230000000"
-    },
-    {
-      "price": "120.015569",
-      "amount": "1.000000000"
-    }
-  ]
-}
-```
-
-to stream orderbooks via websocket public DLOB servers are available at:
+To query or stream orderbooks via WebSocket, public DLOB servers are available at:
 
 - devnet: `wss://master.dlob.drift.trade/ws`
 - mainnet: `wss://dlob.drift.trade/ws`

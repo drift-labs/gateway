@@ -1,7 +1,6 @@
 use drift_sdk::math::leverage::get_leverage;
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
-    dlob_client::DLOBClient,
     event_subscriber::{try_parse_log, CommitmentConfig},
     math::liquidation::{
         calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
@@ -26,10 +25,10 @@ use crate::types::UserCollateralResponse;
 use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-        GetOrderbookRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, OrderbookL2,
-        PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
+        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
+        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
+        UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -55,7 +54,6 @@ pub struct AppState {
     /// true if gateway is using delegated signing
     delegated: bool,
     pub client: Arc<DriftClient<RpcAccountProvider>>,
-    dlob_client: DLOBClient,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
@@ -103,17 +101,10 @@ impl AppState {
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
 
-        let dlob_endpoint = if devnet {
-            "https://master.dlob.drift.trade"
-        } else {
-            "https://dlob.drift.trade"
-        };
-
         Self {
             delegated: wallet.is_delegated(),
             wallet,
             client: Arc::new(client),
-            dlob_client: DLOBClient::new(dlob_endpoint),
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
@@ -434,15 +425,6 @@ impl AppState {
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders").await
-    }
-
-    pub async fn get_orderbook(&self, req: GetOrderbookRequest) -> GatewayResult<OrderbookL2> {
-        let book = self
-            .dlob_client
-            .get_l2(req.market.as_market_id(), None)
-            .await?;
-        let decimals = get_market_decimals(self.client.program_data(), req.market);
-        Ok(OrderbookL2::new(book, decimals))
     }
 
     pub async fn get_tx_events_for_subaccount_id(

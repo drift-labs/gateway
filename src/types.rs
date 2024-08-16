@@ -6,7 +6,6 @@ use drift_sdk::constants::QUOTE_PRECISION;
 use drift_sdk::math::liquidation::CollateralInfo;
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
-    dlob_client::{L2Level, L2Orderbook},
     math::liquidation::MarginRequirementInfo,
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
@@ -14,7 +13,7 @@ use drift_sdk::{
     },
 };
 use rust_decimal::Decimal;
-use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::websocket::AccountEvent;
 
@@ -369,9 +368,6 @@ impl Market {
             market_type: MarketType::Perp,
         }
     }
-    pub fn as_market_id(self) -> drift_sdk::types::MarketId {
-        unsafe { std::mem::transmute(self) }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -482,13 +478,6 @@ pub struct CancelOrdersRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct GetOrderbookRequest {
-    #[serde(flatten)]
-    pub market: Market,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct TxResponse {
     tx: String,
 }
@@ -515,74 +504,6 @@ pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
     pub modify: ModifyOrdersRequest,
     pub place: PlaceOrdersRequest,
-}
-
-/// Serialize DLOB with human readable numeric values
-#[derive(Debug)]
-pub struct OrderbookL2 {
-    inner: L2Orderbook,
-    decimals: u32,
-}
-
-impl OrderbookL2 {
-    pub fn new(inner: L2Orderbook, decimals: u32) -> Self {
-        Self { inner, decimals }
-    }
-}
-
-impl Serialize for OrderbookL2 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(3))?;
-        map.serialize_entry("slot", &self.inner.slot)?;
-        map.serialize_entry(
-            "bids",
-            &PriceLevelSerializer {
-                inner: self.inner.bids.as_slice(),
-                decimals: self.decimals,
-            },
-        )?;
-        map.serialize_entry(
-            "asks",
-            &PriceLevelSerializer {
-                inner: self.inner.asks.as_slice(),
-                decimals: self.decimals,
-            },
-        )?;
-        map.end()
-    }
-}
-
-struct PriceLevelSerializer<'a> {
-    inner: &'a [L2Level],
-    /// decimal precision of the asset
-    decimals: u32,
-}
-
-impl<'a> Serialize for PriceLevelSerializer<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_seq(self.inner.iter().map(|l| PriceLevel::new(l, self.decimals)))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PriceLevel {
-    price: Decimal,
-    amount: Decimal,
-}
-
-impl PriceLevel {
-    pub fn new(level: &L2Level, decimals: u32) -> Self {
-        Self {
-            price: Decimal::new(level.price, PRICE_PRECISION.ilog10()),
-            amount: Decimal::new(level.size, decimals),
-        }
-    }
 }
 
 /// Return the number of decimal places for the market
