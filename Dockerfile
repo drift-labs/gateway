@@ -14,7 +14,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     cp /lib/x86_64-linux-gnu/libgcc_s.so.1 /build/target/release/; \
     fi
 
-FROM gcr.io/distroless/base-debian12
+FROM debian:12
 COPY --from=builder /build/target/release/libgcc_s.so.1 /lib/
 COPY --from=builder /build/target/release/drift-gateway /bin/drift-gateway
 ENTRYPOINT ["/bin/drift-gateway"]
