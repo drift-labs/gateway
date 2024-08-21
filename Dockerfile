@@ -17,4 +17,5 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 FROM debian:12
 COPY --from=builder /build/target/release/libgcc_s.so.1 /lib/
 COPY --from=builder /build/target/release/drift-gateway /bin/drift-gateway
+RUN apt-get update && apt-get install -y curl && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 ENTRYPOINT ["/bin/drift-gateway"]
