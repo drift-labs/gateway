@@ -1,16 +1,23 @@
-use drift_sdk::math::leverage::get_leverage;
+use std::{borrow::Cow, str::FromStr, sync::Arc};
+
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION},
+    constants::ProgramData,
+    drift_idl::types::{MarginRequirementType, MarketType},
     event_subscriber::{try_parse_log, CommitmentConfig},
-    math::liquidation::{
-        calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
-        calculate_margin_requirements, MarginCategory,
+    ffi::IntoFfi,
+    math::{
+        constants::BASE_PRECISION,
+        leverage::get_leverage,
+        liquidation::{
+            calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
+            calculate_margin_requirements,
+        },
     },
     types::{
-        self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
-        SdkResult, VersionedMessage,
+        self, MarketId, ModifyOrderParams, RpcSendTransactionConfig, SdkError, SdkResult,
+        VersionedMessage,
     },
-    AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
+    DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
@@ -18,17 +25,15 @@ use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
-use std::{borrow::Cow, str::FromStr, sync::Arc};
 use thiserror::Error;
 
-use crate::types::UserCollateralResponse;
 use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
         MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
         PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
-        UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        UserCollateralResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -53,7 +58,7 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
-    pub client: Arc<DriftClient<RpcAccountProvider>>,
+    pub client: Arc<DriftClient>,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
@@ -227,13 +232,13 @@ impl AppState {
     pub async fn get_collateral(
         &self,
         ctx: Context,
-        margin_category: Option<MarginCategory>,
+        margin_requirement_type: MarginRequirementType,
     ) -> GatewayResult<UserCollateralResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         calculate_collateral(
             &self.client,
             &self.client.get_user_account(&sub_account).await?,
-            margin_category.unwrap_or(MarginCategory::Maintenance),
+            margin_requirement_type,
         )
         .map(Into::into)
         .map_err(ControllerError::Sdk)
@@ -261,6 +266,7 @@ impl AppState {
             let oracle_price = oracle?;
             let unsettled_pnl = Decimal::new(
                 perp_position
+                    .ffi()
                     .get_unrealized_pnl(oracle_price)
                     .unwrap_or_default() as i64,
                 PRICE_DECIMALS,
@@ -324,8 +330,9 @@ impl AppState {
         market_index: u16,
     ) -> GatewayResult<MarketInfoResponse> {
         let perp = self.client.get_perp_market_info(market_index).await?;
-        let open_interest = (perp.get_open_interest() / BASE_PRECISION as u128) as u64;
-        let max_open_interest = (perp.amm.max_open_interest / BASE_PRECISION as u128) as u64;
+        let open_interest = (perp.ffi().get_open_interest() / BASE_PRECISION as u128) as u64;
+        let max_open_interest =
+            (perp.amm.max_open_interest.as_u128() / BASE_PRECISION as u128) as u64;
 
         Ok(MarketInfoResponse {
             open_interest,
@@ -646,7 +653,7 @@ pub fn create_wallet(
 }
 
 /// get priority fee estimated from chain
-async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
+async fn get_priority_fee(client: &DriftClient) -> u64 {
     let mut priority_fee = 1_000_u64;
     // use sol-perp market as proxy for local-ish drift fee market
     if let Ok(mut recent_fees) = client

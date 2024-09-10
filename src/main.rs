@@ -1,3 +1,5 @@
+use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
+
 use actix_web::{
     delete, get,
     middleware::Logger,
@@ -6,12 +8,13 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{debug, info, warn};
-
 use controller::{create_wallet, AppState, ControllerError};
-use drift_sdk::{types::CommitmentConfig, Pubkey};
+use drift_sdk::{
+    types::{CommitmentConfig, MarginRequirementType},
+    Pubkey,
+};
+use log::{debug, info, warn};
 use serde_json::json;
-use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, Market, ModifyOrdersRequest, PlaceOrdersRequest,
 };
@@ -193,7 +196,11 @@ async fn get_collateral(
     controller: web::Data<AppState>,
     ctx: web::Query<Context>,
 ) -> impl Responder {
-    handle_result(controller.get_collateral(ctx.0, None).await)
+    handle_result(
+        controller
+            .get_collateral(ctx.0, MarginRequirementType::Maintenance)
+            .await,
+    )
 }
 
 #[actix_web::main]
@@ -390,11 +397,9 @@ struct GatewayConfig {
 mod tests {
     use actix_web::{http::Method, test, App};
 
-    use crate::types::Market;
-
     use self::controller::create_wallet;
-
     use super::*;
+    use crate::types::Market;
 
     const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";
 

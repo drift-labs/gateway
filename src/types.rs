@@ -2,14 +2,18 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
-use drift_sdk::constants::QUOTE_PRECISION;
-use drift_sdk::math::liquidation::CollateralInfo;
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
-    math::liquidation::MarginRequirementInfo,
+    constants::ProgramData,
+    ffi::IntoFfi,
+    math::{
+        constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
+        liquidation::{CollateralInfo, MarginRequirementInfo},
+    },
     types::{
-        self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
-        PositionDirection, PostOnlyParam, SpotMarket,
+        self as sdk_types,
+        accounts::{PerpMarket, SpotMarket},
+        MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
+        PostOnlyParam,
     },
 };
 use rust_decimal::Decimal;
@@ -113,17 +117,14 @@ pub struct SpotPosition {
 }
 
 impl SpotPosition {
-    pub fn from_sdk_type(
-        value: &sdk_types::SpotPosition,
-        spot_market: &sdk_types::SpotMarket,
-    ) -> Self {
+    pub fn from_sdk_type(position: &sdk_types::SpotPosition, spot_market: &SpotMarket) -> Self {
         // TODO: handle error
-        let token_amount = value.get_token_amount(spot_market).expect("ok");
+        let token_amount = position.ffi().get_token_amount(spot_market).expect("ok");
         Self {
             amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals)
                 .normalize(),
-            market_index: value.market_index,
-            balance_type: if value.balance_type == Default::default() {
+            market_index: position.market_index,
+            balance_type: if position.balance_type == Default::default() {
                 "deposit".into()
             } else {
                 "borrow".into()
@@ -571,15 +572,15 @@ impl From<CollateralInfo> for UserCollateralResponse {
 
 #[cfg(test)]
 mod tests {
-    use drift_sdk::{
-        constants::BASE_PRECISION,
-        types::{MarketType, OrderType, PositionDirection},
-    };
     use std::str::FromStr;
 
-    use crate::types::{Market, ModifyOrder, Order};
+    use drift_sdk::{
+        math::constants::BASE_PRECISION,
+        types::{MarketType, OrderType, PositionDirection},
+    };
 
     use super::{Decimal, PlaceOrder};
+    use crate::types::{Market, ModifyOrder, Order};
 
     #[test]
     fn place_order_to_order() {

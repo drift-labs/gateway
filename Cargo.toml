@@ -6,18 +6,19 @@ edition = "2021"
 [dependencies]
 actix-web = "*"
 # pinned to match drift program version
-anchor-lang = "=0.29.0"
+anchor-lang = "*"
 argh = "*"
-drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "9d90de9" }
+# drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "9d90de9" }
+drift-sdk = { path = "../drift-rs" }
 env_logger = "*"
 futures-util = "*"
 log = "*"
 rust_decimal = "*"
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
-solana-client = "1.16"
-solana-sdk = "1.16"
-solana-transaction-status = "1.16"
+solana-client = "2"
+solana-sdk = "2"
+solana-transaction-status = "2"
 thiserror = "*"
 tokio = "*"
 tokio-tungstenite = "*"
