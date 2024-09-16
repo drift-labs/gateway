@@ -648,7 +648,7 @@ mod tests {
         assert_eq!(order.oracle_price_offset, Some(-500_000));
 
         let o = drift_sdk::types::Order {
-            base_asset_amount: 1 * BASE_PRECISION,
+            base_asset_amount: 1 * BASE_PRECISION as u64,
             price: 0,
             market_index: 0,
             market_type: MarketType::Perp,

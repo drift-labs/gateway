@@ -522,7 +522,7 @@ Returns solana tx signature on success
 
 ```bash
 # cancel all by market id
-$ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}}'
+$ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}'
 # cancel by order ids
 $ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
 # cancel by user assigned order ids
