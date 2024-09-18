@@ -1,3 +1,5 @@
+use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
+
 use actix_web::{
     delete, get,
     middleware::Logger,
@@ -6,12 +8,10 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use log::{debug, info, warn};
-
 use controller::{create_wallet, AppState, ControllerError};
 use drift_sdk::{types::CommitmentConfig, Pubkey};
+use log::{debug, info, warn};
 use serde_json::json;
-use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
 use types::{
     CancelAndPlaceRequest, CancelOrdersRequest, Market, ModifyOrdersRequest, PlaceOrdersRequest,
 };
@@ -390,10 +390,7 @@ struct GatewayConfig {
 mod tests {
     use actix_web::{http::Method, test, App};
 
-    use crate::types::Market;
-
     use self::controller::create_wallet;
-
     use super::*;
 
     const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";

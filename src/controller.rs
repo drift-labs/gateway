@@ -1,34 +1,35 @@
-use drift_sdk::math::leverage::get_leverage;
+use std::{borrow::Cow, str::FromStr, sync::Arc};
+
 use drift_sdk::{
     constants::{ProgramData, BASE_PRECISION},
     event_subscriber::{try_parse_log, CommitmentConfig},
-    math::liquidation::{
-        calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
-        calculate_margin_requirements, MarginCategory,
+    math::{
+        leverage::get_leverage,
+        liquidation::{
+            calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
+            calculate_margin_requirements, MarginCategory,
+        },
     },
     types::{
         self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
-        SdkResult, VersionedMessage,
+        VersionedMessage,
     },
     AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
 };
-use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
-use std::{borrow::Cow, str::FromStr, sync::Arc};
 use thiserror::Error;
 
-use crate::types::UserCollateralResponse;
 use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
         MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
         PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
-        UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        UserCollateralResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -96,10 +97,14 @@ impl AppState {
         };
 
         let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
-        let client = DriftClient::new(context, account_provider, wallet.clone())
+        let mut client = DriftClient::new(context, account_provider, wallet.clone())
             .await
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
+        client
+            .add_user(default_subaccount_id.unwrap_or(0))
+            .await
+            .expect("user sub");
 
         Self {
             delegated: wallet.is_delegated(),
@@ -137,16 +142,20 @@ impl AppState {
         req: CancelOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let (account_data, pf) = tokio::join!(
-            self.client.get_user_account(&sub_account),
-            get_priority_fee(&self.client)
-        );
+        let account_data = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+        let pf = get_priority_fee(&self.client).await;
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Owned(account_data?),
+            Cow::Owned(account_data),
             self.delegated,
         )
         .with_priority_fee(priority_fee, ctx.cu_limit);
@@ -154,53 +163,57 @@ impl AppState {
         self.send_tx(tx, "cancel_orders").await
     }
 
-    /// Return orders by position if given, otherwise return all positions
+    /// Return position for market if given, otherwise return all positions
     pub async fn get_positions(
         &self,
         ctx: Context,
         req: Option<GetPositionsRequest>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let (all_spot, all_perp) = self
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+        let user = match self
             .client
-            .all_positions(&self.resolve_sub_account(ctx.sub_account_id))
-            .await?;
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
 
-        // calculating spot token balance requires knowing the 'spot market account' data
-        let mut filtered_spot_positions = Vec::<SpotPosition>::with_capacity(all_spot.len());
-        let mut filtered_spot_futs = FuturesUnordered::from_iter(
-            all_spot
-                .iter()
-                .filter(|p| {
-                    if let Some(GetPositionsRequest { ref market }) = req {
-                        p.market_index == market.market_index
-                            && MarketType::Spot == market.market_type
-                    } else {
-                        true
-                    }
-                })
-                .map(|x| async {
-                    let spot_market_info = self.client.get_spot_market_info(x.market_index).await?;
-                    SdkResult::Ok(SpotPosition::from_sdk_type(x, &spot_market_info))
-                }),
-        );
-        while let Some(result) = filtered_spot_futs.next().await {
-            filtered_spot_positions.push(result?);
-        }
+        let spot_positions = user
+            .spot_positions
+            .iter()
+            .filter(|p| {
+                !p.is_available()
+                    || req.as_ref().is_some_and(|r| {
+                        r.market.market_index == p.market_index
+                            && r.market.market_type == MarketType::Perp
+                    })
+            })
+            .map(|x| {
+                // calculating spot token balance requires knowing the 'spot market account' data
+                let spot_market_info = self
+                    .client
+                    .get_spot_market_account(x.market_index)
+                    .expect("spot market exists");
+                SpotPosition::from_sdk_type(x, &spot_market_info)
+            })
+            .collect();
+
+        let perp_positions = user
+            .perp_positions
+            .into_iter()
+            .filter(|p| {
+                !p.is_available()
+                    || req.as_ref().is_some_and(|r| {
+                        r.market.market_index == p.market_index
+                            && r.market.market_type == MarketType::Perp
+                    })
+            })
+            .map(Into::into)
+            .collect();
 
         Ok(GetPositionsResponse {
-            spot: filtered_spot_positions,
-            perp: all_perp
-                .iter()
-                .filter(|p| {
-                    if let Some(GetPositionsRequest { ref market }) = req {
-                        p.market_index == market.market_index
-                            && MarketType::Perp == market.market_type
-                    } else {
-                        true
-                    }
-                })
-                .map(|x| (*x).into())
-                .collect(),
+            spot: spot_positions,
+            perp: perp_positions,
         })
     }
 
@@ -245,20 +258,27 @@ impl AppState {
         market: Market,
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let (perp_position, user, oracle) = tokio::join!(
-            self.client.perp_position(&sub_account, market.market_index),
-            self.client.get_user_account(&sub_account),
-            self.client
-                .oracle_price(MarketId::perp(market.market_index)),
-        );
+        let user = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+        let perp_position = user.get_perp_position(market.market_index);
 
-        if let Some(perp_position) = perp_position? {
+        let oracle = self
+            .client
+            .get_oracle_price_data_and_slot_for_perp_market(market.market_index)
+            .expect("oracle");
+
+        if let Ok(perp_position) = perp_position {
             let result = calculate_liquidation_price_and_unrealized_pnl(
                 &self.client,
-                &user?,
+                &user,
                 market.market_index,
             )?;
-            let oracle_price = oracle?;
+            let oracle_price = oracle.data.price;
             let unsettled_pnl = Decimal::new(
                 perp_position
                     .get_unrealized_pnl(oracle_price)
@@ -266,7 +286,7 @@ impl AppState {
                 PRICE_DECIMALS,
             );
 
-            let mut p: PerpPosition = perp_position.into();
+            let mut p: PerpPosition = (*perp_position).into();
             p.set_extended_info(PerpPositionExtended {
                 liquidation_price: Decimal::new(result.liquidation_price, PRICE_DECIMALS),
                 unrealized_pnl: Decimal::new(result.unrealized_pnl as i64, PRICE_DECIMALS),
@@ -287,7 +307,21 @@ impl AppState {
         req: Option<GetOrdersRequest>,
     ) -> GatewayResult<GetOrdersResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let orders = self.client.all_orders(&sub_account).await?;
+        let user = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+
+        // TODO: export SDK type
+        let orders: Vec<types::Order> = user
+            .orders
+            .into_iter()
+            .filter(|o| o.status as u8 == 1)
+            .collect();
+
         Ok(GetOrdersResponse {
             orders: orders
                 .into_iter()
@@ -349,15 +383,19 @@ impl AppState {
             .collect();
 
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let (account_data, pf) = tokio::join!(
-            self.client.get_user_account(&sub_account),
-            get_priority_fee(&self.client)
-        );
+        let account_data = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+        let pf = get_priority_fee(&self.client).await;
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Owned(account_data?),
+            Cow::Owned(account_data),
             self.delegated,
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
@@ -411,15 +449,19 @@ impl AppState {
         req: ModifyOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let (account_data, pf) = tokio::join!(
-            self.client.get_user_account(&sub_account),
-            get_priority_fee(&self.client)
-        );
+        let account_data = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+        let pf = get_priority_fee(&self.client).await;
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Owned(account_data?),
+            Cow::Owned(account_data),
             self.delegated,
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
