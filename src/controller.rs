@@ -279,10 +279,10 @@ impl AppState {
                 market.market_index,
             )?;
             let oracle_price = oracle.data.price;
-            let unsettled_pnl = Decimal::new(
+            let unsettled_pnl = Decimal::from_i128_with_scale(
                 perp_position
                     .get_unrealized_pnl(oracle_price)
-                    .unwrap_or_default() as i64,
+                    .unwrap_or_default(),
                 PRICE_DECIMALS,
             );
 
