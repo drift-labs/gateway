@@ -2,11 +2,9 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
-use drift_sdk::constants::QUOTE_PRECISION;
-use drift_sdk::math::liquidation::CollateralInfo;
 use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION},
-    math::liquidation::MarginRequirementInfo,
+    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
+    math::liquidation::{CollateralInfo, MarginRequirementInfo},
     types::{
         self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
         PositionDirection, PostOnlyParam, SpotMarket,
@@ -571,15 +569,15 @@ impl From<CollateralInfo> for UserCollateralResponse {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use drift_sdk::{
         constants::BASE_PRECISION,
         types::{MarketType, OrderType, PositionDirection},
     };
-    use std::str::FromStr;
-
-    use crate::types::{Market, ModifyOrder, Order};
 
     use super::{Decimal, PlaceOrder};
+    use crate::types::{Market, ModifyOrder, Order};
 
     #[test]
     fn place_order_to_order() {
