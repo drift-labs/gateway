@@ -1646,7 +1646,7 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "actix-web",
  "anchor-lang",
@@ -1678,7 +1678,7 @@ dependencies = [
 [[package]]
 name = "drift-sdk"
 version = "0.1.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=59e3e939#59e3e939831b3100dc47fe3ad19cf4c1802d2124"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ca0884b#ca0884b9e34ab0436e435ca0404c597983357176"
 dependencies = [
  "anchor-lang",
  "base64 0.13.1",
