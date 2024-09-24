@@ -3,7 +3,7 @@ use std::{borrow::Cow, str::FromStr, sync::Arc};
 use drift_sdk::{
     constants::ProgramData,
     drift_idl::types::{MarginRequirementType, MarketType},
-    event_subscriber::{try_parse_log, CommitmentConfig},
+    event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     ffi::IntoFfi,
     math::{
         constants::BASE_PRECISION,
@@ -16,7 +16,7 @@ use drift_sdk::{
     types::{
         self, MarketId, ModifyOrderParams, RpcSendTransactionConfig, SdkError, VersionedMessage,
     },
-    DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
+    DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
 use log::{debug, warn};
 use rust_decimal::Decimal;
@@ -98,13 +98,17 @@ impl AppState {
             types::Context::MainNet
         };
 
-        let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
-        let mut client = DriftClient::new(context, account_provider, wallet.clone())
+        let rpc_client = RpcClient::new_with_commitment(endpoint.into(), state_commitment);
+        let client = DriftClient::new(context, rpc_client, wallet.clone())
             .await
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
-        if let Err(err) = client.add_user(default_subaccount_id.unwrap_or(0)).await {
+
+        let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
+        if let Err(err) = client.subscribe_user(&default_subaccount_address).await {
             log::error!("couldn't subscribe to user updates: {err:?}");
+        } else {
+            log::info!("subscribed to subaccount: {default_subaccount_address}");
         }
 
         Self {
@@ -143,16 +147,7 @@ impl AppState {
         req: CancelOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => {
-                let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-                self.client.get_user_account(&sub_account).await?
-            }
-        };
+        let account_data = self.client.get_user_account(&sub_account).await?;
         let pf = get_priority_fee(&self.client).await;
 
         let priority_fee = ctx.cu_price.unwrap_or(pf);
@@ -255,20 +250,12 @@ impl AppState {
         ctx: Context,
         market: Market,
     ) -> GatewayResult<PerpPosition> {
-        let user = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => {
-                let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-                self.client.get_user_account(&sub_account).await?
-            }
-        };
-
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+        let user = self.client.get_user_account(&sub_account).await?;
         let oracle_price = self
             .client
-            .oracle_price(MarketId::perp(market.market_index))?;
+            .oracle_price(MarketId::perp(market.market_index))
+            .await?;
         let perp_position = user
             .perp_positions
             .iter()
@@ -372,16 +359,7 @@ impl AppState {
             .collect();
 
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => {
-                let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-                self.client.get_user_account(&sub_account).await?
-            }
-        };
+        let account_data = self.client.get_user_account(&sub_account).await?;
         let pf = get_priority_fee(&self.client).await;
 
         let builder = TransactionBuilder::new(
@@ -406,16 +384,7 @@ impl AppState {
         req: PlaceOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => {
-                let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-                self.client.get_user_account(&sub_account).await?
-            }
-        };
+        let account_data = self.client.get_user_account(&sub_account).await?;
         let pf = get_priority_fee(&self.client).await;
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority fee: {priority_fee:?}");
@@ -447,16 +416,7 @@ impl AppState {
         req: ModifyOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => {
-                let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-                self.client.get_user_account(&sub_account).await?
-            }
-        };
+        let account_data = self.client.get_user_account(&sub_account).await?;
         let pf = get_priority_fee(&self.client).await;
         let builder = TransactionBuilder::new(
             self.client.program_data(),

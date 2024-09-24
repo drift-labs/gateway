@@ -1747,6 +1747,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "drift-idl-gen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "drift-sdk"
 version = "1.0.0"
 dependencies = [
@@ -1755,6 +1767,7 @@ dependencies = [
  "base64 0.21.7",
  "bytemuck",
  "dashmap",
+ "drift-idl-gen",
  "env_logger 0.11.5",
  "fnv",
  "futures-util",
