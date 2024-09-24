@@ -13,6 +13,7 @@ use drift_sdk::{
             calculate_margin_requirements,
         },
     },
+    priority_fee_subscriber::PriorityFeeSubscriber,
     types::{
         self, MarketId, ModifyOrderParams, RpcSendTransactionConfig, SdkError, VersionedMessage,
     },
@@ -63,6 +64,7 @@ pub struct AppState {
     default_subaccount_id: u16,
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
+    priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
 }
 
 impl AppState {
@@ -111,6 +113,14 @@ impl AppState {
             log::info!("subscribed to subaccount: {default_subaccount_address}");
         }
 
+        let priority_fee_subscriber = PriorityFeeSubscriber::new(
+            endpoint.to_string(),
+            &[client
+                .get_perp_market_account(0)
+                .expect("market exists")
+                .pubkey],
+        )
+        .subscribe();
         Self {
             delegated: wallet.is_delegated(),
             wallet,
@@ -118,6 +128,7 @@ impl AppState {
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
+            priority_fee_subscriber,
         }
     }
 
@@ -148,7 +159,7 @@ impl AppState {
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
-        let pf = get_priority_fee(&self.client).await;
+        let pf = self.get_priority_fee();
 
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
@@ -360,7 +371,7 @@ impl AppState {
 
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
-        let pf = get_priority_fee(&self.client).await;
+        let pf = self.get_priority_fee();
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
@@ -385,7 +396,7 @@ impl AppState {
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
-        let pf = get_priority_fee(&self.client).await;
+        let pf = self.get_priority_fee();
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority fee: {priority_fee:?}");
 
@@ -417,7 +428,7 @@ impl AppState {
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
-        let pf = get_priority_fee(&self.client).await;
+        let pf = self.get_priority_fee();
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
@@ -495,17 +506,16 @@ impl AppState {
         }
     }
 
+    fn get_priority_fee(&self) -> u64 {
+        self.priority_fee_subscriber.priority_fee_nth(0.9)
+    }
+
     async fn send_tx(
         &self,
         tx: VersionedMessage,
         reason: &'static str,
     ) -> GatewayResult<TxResponse> {
-        let (recent_block_hash, _) = self
-            .client
-            .inner()
-            .get_latest_blockhash_with_commitment(CommitmentConfig::finalized())
-            .await
-            .map_err(SdkError::from)?;
+        let recent_block_hash = self.client.get_latest_blockhash().await?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
         let tx_config = RpcSendTransactionConfig {
             max_retries: Some(0),
@@ -644,44 +654,5 @@ pub fn create_wallet(
         _ => {
             panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
-    }
-}
-
-/// get priority fee estimated from chain
-async fn get_priority_fee(client: &DriftClient) -> u64 {
-    let mut priority_fee = 1_000_u64;
-    // use sol-perp market as proxy for local-ish drift fee market
-    if let Ok(mut recent_fees) = client
-        .get_recent_priority_fees(&[MarketId::perp(0)], Some(100))
-        .await
-    {
-        recent_fees.sort_unstable();
-        let idx = (recent_fees.len() * 90) / 100; // 90-th percentile
-        priority_fee = recent_fees[idx];
-    } else {
-        warn!(target: "controller", "failed to fetch live priority fee");
-    }
-
-    priority_fee
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[ignore]
-    #[tokio::test]
-    async fn test_pf() {
-        // flakey needs a mainnet RPC getProgramAccounts
-        let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com");
-        let client = DriftClient::new(
-            types::Context::DevNet,
-            account_provider,
-            Wallet::read_only(Pubkey::new_unique()),
-        )
-        .await
-        .unwrap();
-
-        assert!(get_priority_fee(&client).await > 0);
     }
 }
