@@ -5,11 +5,9 @@ edition = "2021"
 
 [dependencies]
 actix-web = "*"
-# pinned to match drift program version
-anchor-lang = "*"
 argh = "*"
-# drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "9d90de9" }
-drift-sdk = { path = "../drift-rs" }
+drift-sdk = { git = "https://github.com/drift-labs/drift-rs", rev = "fcbf9f6" }
+# drift-sdk = { path = "../drift-rs" }
 env_logger = "*"
 futures-util = "*"
 log = "*"
