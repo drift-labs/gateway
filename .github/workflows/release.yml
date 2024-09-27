@@ -32,6 +32,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish image
         run: |
-          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}:latest"
+          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
