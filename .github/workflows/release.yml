@@ -29,7 +29,6 @@ jobs:
             -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
             -t "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
-          VERSION_TAG: ${{ steps.gateway_version.outputs.version }}   
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish image
         run: |
