@@ -21,13 +21,11 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v2
-      - name: find gateway version
-        id: gateway_version
-        run: echo "version=$(cat Cargo.toml | grep -e '\d.\d.\d' -o)" >> $GITHUB_OUTPUT
       - name: Build image
         run: |
+          VERSION_TAG=$(cat Cargo.toml | grep -e '\d.\d.\d' -o)
           docker build -f test.Dockerfile .\
-            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA:0:6}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
             -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
             -t "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
