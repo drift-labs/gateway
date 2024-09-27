@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - "feat/78"
+      - "master"
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: "test-${{ github.repository }}"
+
+jobs:
+  docker:
+    runs-on: ubicloud
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v2
+      - name: find gateway version
+        id: gateway_version
+        run: 
+          $(cat Cargo.toml |  grep -e '\d.\d.\d' -o)
+      - name: Build image
+        run: |
+          docker build -f test.Dockerfile .\
+            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:latest"
+        env:
+          VERSION_TAG: ${{ steps.gateway_version.outputs.stdout }}   
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish image
+        run: |
+          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
