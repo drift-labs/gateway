@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Build image
         run: |
-          VERSION_TAG=$(grep -Eo '\d.\d.\d' Cargo.toml)
+          VERSION_TAG=$(grep -o -m1 '\d.\d.\d' Cargo.toml)
           echo "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"
           echo "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
 
