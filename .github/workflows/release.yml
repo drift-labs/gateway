@@ -23,8 +23,8 @@ jobs:
         uses: actions/checkout@v2
       - name: find gateway version
         id: gateway_version
-        run: 
-          $(cat Cargo.toml |  grep -e '\d.\d.\d' -o)
+        run: |
+          cat Cargo.toml |  grep -e '\d.\d.\d' -o
       - name: Build image
         run: |
           docker build -f test.Dockerfile .\
