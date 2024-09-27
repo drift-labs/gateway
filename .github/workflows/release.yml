@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     branches:
-      - "feat/78"
       - "master"
 env:
   REGISTRY: ghcr.io
@@ -23,9 +22,9 @@ jobs:
       - name: Build image
         run: |
           VERSION_TAG=$(grep -Po -m1 '\d.\d.\d' Cargo.toml)
-          docker build -f test.Dockerfile .\
-            -t "${REGISTRY}/${IMAGE_NAME}:test-${GITHUB_SHA::6}"\
-            -t "${REGISTRY}/${IMAGE_NAME}:test-${VERSION_TAG}"\
+          docker build -f Dockerfile .\
+            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
             -t "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
