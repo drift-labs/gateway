@@ -14,8 +14,9 @@ RUN CARGO_DRIFT_FFI_PATH="/usr/local/lib" cargo build --release
 
 RUN cp /lib/x86_64-linux-gnu/libgcc_s.so.1 /build/target/release/
 
-FROM gcr.io/distroless/base-debian12
+FROM debian:12
 COPY --from=builder /build/target/release/libgcc_s.so.1 /lib/
 COPY --from=builder /usr/local/lib/libdrift_ffi_sys.so /lib/
 COPY --from=builder /build/target/release/drift-gateway /bin/drift-gateway
+RUN apt-get update && apt-get install -y curl && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 ENTRYPOINT ["/bin/drift-gateway"]

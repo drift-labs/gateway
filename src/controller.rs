@@ -105,6 +105,10 @@ impl AppState {
             .await
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
+        client
+            .add_user(default_subaccount_id.unwrap_or(0))
+            .await
+            .expect("user sub");
 
         let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
         if let Err(err) = client.subscribe_user(&default_subaccount_address).await {
@@ -174,16 +178,20 @@ impl AppState {
         self.send_tx(tx, "cancel_orders").await
     }
 
-    /// Return orders by position if given, otherwise return all positions
+    /// Return position for market if given, otherwise return all positions
     pub async fn get_positions(
         &self,
         ctx: Context,
         req: Option<GetPositionsRequest>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let (all_spot, all_perp) = self
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+        let user = match self
             .client
-            .all_positions(&self.resolve_sub_account(ctx.sub_account_id))
-            .await?;
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
 
         // calculating spot token balance requires knowing the 'spot market account' data
         let filtered_spot_positions = all_spot
@@ -205,19 +213,8 @@ impl AppState {
             .collect();
 
         Ok(GetPositionsResponse {
-            spot: filtered_spot_positions,
-            perp: all_perp
-                .iter()
-                .filter(|p| {
-                    if let Some(GetPositionsRequest { ref market }) = req {
-                        p.market_index == market.market_index
-                            && MarketType::Perp == market.market_type
-                    } else {
-                        true
-                    }
-                })
-                .map(|x| (*x).into())
-                .collect(),
+            spot: spot_positions,
+            perp: perp_positions,
         })
     }
 
@@ -282,7 +279,7 @@ impl AppState {
                 perp_position
                     .ffi()
                     .get_unrealized_pnl(oracle_price)
-                    .unwrap_or_default() as i64,
+                    .unwrap_or_default(),
                 PRICE_DECIMALS,
             );
 
@@ -307,7 +304,21 @@ impl AppState {
         req: Option<GetOrdersRequest>,
     ) -> GatewayResult<GetOrdersResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let orders = self.client.all_orders(&sub_account).await?;
+        let user = match self
+            .client
+            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
+        {
+            Some(user) => user.get_user_account(),
+            None => self.client.get_user_account(&sub_account).await?,
+        };
+
+        // TODO: export SDK type
+        let orders: Vec<types::Order> = user
+            .orders
+            .into_iter()
+            .filter(|o| o.status as u8 == 1)
+            .collect();
+
         Ok(GetOrdersResponse {
             orders: orders
                 .into_iter()
