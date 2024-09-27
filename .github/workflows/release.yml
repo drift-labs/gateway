@@ -24,17 +24,14 @@ jobs:
       - name: Build image
         run: |
           VERSION_TAG=$(grep -Po -m1 '\d.\d.\d' Cargo.toml)
-          echo "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"
-          echo "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
-
           docker build -f test.Dockerfile .\
-            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
-            -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:test-${GITHUB_SHA::6}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:test-${VERSION_TAG}"\
             -t "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish image
         run: |
-          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"
+          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
