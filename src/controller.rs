@@ -4,7 +4,6 @@ use drift_sdk::{
     constants::ProgramData,
     drift_idl::types::{MarginRequirementType, MarketType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
-    ffi::IntoFfi,
     math::{
         constants::BASE_PRECISION,
         leverage::get_leverage,
@@ -15,7 +14,8 @@ use drift_sdk::{
     },
     priority_fee_subscriber::PriorityFeeSubscriber,
     types::{
-        self, MarketId, ModifyOrderParams, RpcSendTransactionConfig, SdkError, VersionedMessage,
+        self, MarketId, ModifyOrderParams, OrderStatus, RpcSendTransactionConfig, SdkError,
+        VersionedMessage,
     },
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
@@ -105,10 +105,6 @@ impl AppState {
             .await
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
-        client
-            .add_user(default_subaccount_id.unwrap_or(0))
-            .await
-            .expect("user sub");
 
         let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
         if let Err(err) = client.subscribe_user(&default_subaccount_address).await {
@@ -184,14 +180,10 @@ impl AppState {
         ctx: Context,
         req: Option<GetPositionsRequest>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = match self
+        let (all_spot, all_perp) = self
             .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
+            .all_positions(&self.resolve_sub_account(ctx.sub_account_id))
+            .await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
         let filtered_spot_positions = all_spot
@@ -213,8 +205,19 @@ impl AppState {
             .collect();
 
         Ok(GetPositionsResponse {
-            spot: spot_positions,
-            perp: perp_positions,
+            spot: filtered_spot_positions,
+            perp: all_perp
+                .iter()
+                .filter(|p| {
+                    if let Some(GetPositionsRequest { ref market }) = req {
+                        p.market_index == market.market_index
+                            && MarketType::Perp == market.market_type
+                    } else {
+                        true
+                    }
+                })
+                .map(|x| (*x).into())
+                .collect(),
         })
     }
 
@@ -267,7 +270,7 @@ impl AppState {
         let perp_position = user
             .perp_positions
             .iter()
-            .find(|p| p.market_index == market.market_index && !p.ffi().is_available());
+            .find(|p| p.market_index == market.market_index && !p.is_available());
 
         if let Some(perp_position) = perp_position {
             let result = calculate_liquidation_price_and_unrealized_pnl(
@@ -275,9 +278,8 @@ impl AppState {
                 &user,
                 market.market_index,
             )?;
-            let unsettled_pnl = Decimal::new(
+            let unsettled_pnl = Decimal::from_i128_with_scale(
                 perp_position
-                    .ffi()
                     .get_unrealized_pnl(oracle_price)
                     .unwrap_or_default(),
                 PRICE_DECIMALS,
@@ -304,19 +306,12 @@ impl AppState {
         req: Option<GetOrdersRequest>,
     ) -> GatewayResult<GetOrdersResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
+        let user = self.client.get_user_account(&sub_account).await?;
 
-        // TODO: export SDK type
         let orders: Vec<types::Order> = user
             .orders
             .into_iter()
-            .filter(|o| o.status as u8 == 1)
+            .filter(|o| o.status == OrderStatus::Open)
             .collect();
 
         Ok(GetOrdersResponse {
@@ -355,7 +350,7 @@ impl AppState {
         market_index: u16,
     ) -> GatewayResult<MarketInfoResponse> {
         let perp = self.client.get_perp_market_info(market_index).await?;
-        let open_interest = (perp.ffi().get_open_interest() / BASE_PRECISION as u128) as u64;
+        let open_interest = (perp.get_open_interest() / BASE_PRECISION as u128) as u64;
         let max_open_interest =
             (perp.amm.max_open_interest.as_u128() / BASE_PRECISION as u128) as u64;
 

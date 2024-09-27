@@ -4,7 +4,6 @@
 //!
 use drift_sdk::{
     constants::ProgramData,
-    ffi::IntoFfi,
     math::{
         constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
         liquidation::{CollateralInfo, MarginRequirementInfo},
@@ -119,7 +118,7 @@ pub struct SpotPosition {
 impl SpotPosition {
     pub fn from_sdk_type(position: &sdk_types::SpotPosition, spot_market: &SpotMarket) -> Self {
         // TODO: handle error
-        let token_amount = position.ffi().get_token_amount(spot_market).expect("ok");
+        let token_amount = position.get_token_amount(spot_market).expect("ok");
         Self {
             amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals)
                 .normalize(),
