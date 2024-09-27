@@ -107,7 +107,7 @@ impl AppState {
         client.subscribe().await.expect("subd onchain data");
 
         let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
-        if let Err(err) = client.subscribe_user(&default_subaccount_address).await {
+        if let Err(err) = client.subscribe_account(&default_subaccount_address).await {
             log::error!("couldn't subscribe to user updates: {err:?}");
         } else {
             log::info!("subscribed to subaccount: {default_subaccount_address}");
