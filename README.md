@@ -62,6 +62,14 @@ drift-gateway https://rpc-provider.example.com
 
 ### From Docker
 
+Use prebuilt image, ghcr.io:
+```bash
+# authenticate to github container registry
+docker login -u <GITHUB_USERNAME> -P <GITHUB_PAT_TOKEN>
+# run image
+docker run -p 8080:8080 --platform linux/x86_64 ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0
+```
+
 Build the Docker image:
 
 ```bash
