@@ -207,7 +207,7 @@ impl AppState {
         Ok(GetPositionsResponse {
             spot: filtered_spot_positions,
             perp: all_perp
-                .iter()
+                .into_iter()
                 .filter(|p| {
                     if let Some(GetPositionsRequest { ref market }) = req {
                         p.market_index == market.market_index
@@ -216,7 +216,7 @@ impl AppState {
                         true
                     }
                 })
-                .map(|x| (*x).into())
+                .map(Into::into)
                 .collect(),
         })
     }
@@ -350,9 +350,8 @@ impl AppState {
         market_index: u16,
     ) -> GatewayResult<MarketInfoResponse> {
         let perp = self.client.get_perp_market_info(market_index).await?;
-        let open_interest = (perp.get_open_interest() / BASE_PRECISION as u128) as u64;
-        let max_open_interest =
-            (perp.amm.max_open_interest.as_u128() / BASE_PRECISION as u128) as u64;
+        let open_interest = (perp.get_open_interest() / BASE_PRECISION) as u64;
+        let max_open_interest = (perp.amm.max_open_interest.as_u128() / BASE_PRECISION) as u64;
 
         Ok(MarketInfoResponse {
             open_interest,

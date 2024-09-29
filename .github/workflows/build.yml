@@ -20,7 +20,7 @@ on:
 
 jobs:
   format-build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud
     timeout-minutes: 45
     steps:
       - name: Check out
@@ -31,7 +31,6 @@ jobs:
           profile: minimal
           toolchain: 1.76.0
           components: rustfmt
-          default: true
       - name: Init Cargo Cache
         uses: actions/cache@v3
         continue-on-error: false
