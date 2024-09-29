@@ -1,6 +1,6 @@
 use std::{borrow::Cow, str::FromStr, sync::Arc};
 
-use drift_sdk::{
+use drift_rs::{
     constants::ProgramData,
     drift_idl::types::{MarginRequirementType, MarketType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},

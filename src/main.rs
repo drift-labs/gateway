@@ -8,7 +8,7 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use drift_sdk::{
+use drift_rs::{
     types::{CommitmentConfig, MarginRequirementType},
     Pubkey,
 };

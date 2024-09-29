@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, ops::Neg, sync::Arc};
 
-use drift_sdk::{
+use drift_rs::{
     async_utils::retry_policy::{self},
     constants::ProgramData,
     event_subscriber::{DriftEvent, EventSubscriber},

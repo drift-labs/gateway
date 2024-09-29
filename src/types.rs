@@ -2,7 +2,7 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
-use drift_sdk::{
+use drift_rs::{
     constants::ProgramData,
     math::{
         constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
@@ -573,7 +573,7 @@ impl From<CollateralInfo> for UserCollateralResponse {
 mod tests {
     use std::str::FromStr;
 
-    use drift_sdk::{
+    use drift_rs::{
         math::constants::BASE_PRECISION,
         types::{MarketType, OrderType, PositionDirection},
     };
@@ -646,7 +646,7 @@ mod tests {
         assert_eq!(order.price, 0);
         assert_eq!(order.oracle_price_offset, Some(-500_000));
 
-        let o = drift_sdk::types::Order {
+        let o = drift_rs::types::Order {
             base_asset_amount: 1 * BASE_PRECISION as u64,
             price: 0,
             market_index: 0,
@@ -668,7 +668,7 @@ mod tests {
             (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 9),
         ];
         for (input, expected, base_decimals) in cases {
-            let o = drift_sdk::types::Order {
+            let o = drift_rs::types::Order {
                 base_asset_amount: input,
                 price: input,
                 market_type: MarketType::Perp,
