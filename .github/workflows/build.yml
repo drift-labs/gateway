@@ -51,5 +51,5 @@ jobs:
         # limit test parallelism to prevent hitting RPC rate-limits
         run: |
           ls -al /usr/local/lib
-          ldconfig /usr/local/lib
+          sudo ldconfig /usr/local/lib
           cargo test --all -- --test-threads=1
