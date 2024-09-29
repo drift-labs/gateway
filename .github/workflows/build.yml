@@ -31,16 +31,6 @@ jobs:
           profile: minimal
           toolchain: 1.76.0
           components: rustfmt
-      - name: Init Cargo Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            target/            
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Format
         run: cargo fmt --all -- --check
       - name: Build
@@ -51,5 +41,5 @@ jobs:
         # limit test parallelism to prevent hitting RPC rate-limits
         run: |
           ls -al /usr/local/lib
-          sudo ldconfig /usr/local/lib
+          sudo ldconfig
           cargo test --all -- --test-threads=1
