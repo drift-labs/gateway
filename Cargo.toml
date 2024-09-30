@@ -4,7 +4,7 @@ version = "1.0.4"
 edition = "2021"
 
 [dependencies]
-actix-web = "*"w
+actix-web = "*"
 argh = "*"
 drift-rs = { git = "https://github.com/drift-labs/drift-rs", tag = "v1.0.0-alpha.0" }
 env_logger = "*"
