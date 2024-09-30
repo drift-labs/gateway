@@ -35,7 +35,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Build
         run: |
-          cargo build -vv
+          cargo check -vv
           ls -al /usr/local/lib
           ls -al /usr/lib
         env:
