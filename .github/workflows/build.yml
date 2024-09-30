@@ -25,18 +25,18 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v2
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.76.0
-          components: rustfmt
+      - name: Config rust toolchain
+        run: |
+          rustup show active-toolchain
+          rustup component add rustfmt
+          rustup install 1.76.0-x86_64-unknown-linux-gnu
       - name: Format
         run: cargo fmt --all -- --check
       - name: Build
         run: |
-          cargo check --all
+          cargo check
           ls -al /usr/local/lib
+          ls -al /usr/lib
         env:
           CARGO_DRIFT_FFI_STATIC: 1
       - name: Test
