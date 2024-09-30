@@ -1705,20 +1705,20 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=ba163a7#ba163a753ad413dcaa1c494ead2bfca6b796f111"
+source = "git+https://github.com/drift-labs/drift-rs?branch=fix/rpath#cf6b675546a7b98ba2618e36fe8fd36873c99446"
 dependencies = [
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
- "sha2 0.9.9",
- "syn 1.0.109",
+ "sha2 0.10.8",
+ "syn 2.0.79",
 ]
 
 [[package]]
 name = "drift-rs"
 version = "1.0.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=ba163a7#ba163a753ad413dcaa1c494ead2bfca6b796f111"
+source = "git+https://github.com/drift-labs/drift-rs?branch=fix/rpath#cf6b675546a7b98ba2618e36fe8fd36873c99446"
 dependencies = [
  "abi_stable",
  "anchor-lang",

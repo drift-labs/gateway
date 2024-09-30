@@ -35,15 +35,10 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Build
         run: |
-          cargo check -vv
-          ls -al /usr/local/lib
-          ls -al /usr/lib
-        env:
-          CARGO_DRIFT_FFI_STATIC: 1
+          cargo check
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
         # limit test parallelism to prevent hitting RPC rate-limits
         run: |
-          sudo ldconfig
           cargo test --all -- --test-threads=1
