@@ -34,7 +34,11 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Build
-        run: cargo check --all
+        run: |
+          cargo check --all
+          ls -al /usr/local/lib
+        env:
+          CARGO_DRIFT_FFI_STATIC: 1
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
