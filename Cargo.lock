@@ -1705,7 +1705,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=92d6cb92#92d6cb92d9c214ce4619056ca7bd959b60cf4e51"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ba163a7#ba163a753ad413dcaa1c494ead2bfca6b796f111"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1718,7 +1718,7 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=92d6cb92#92d6cb92d9c214ce4619056ca7bd959b60cf4e51"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ba163a7#ba163a753ad413dcaa1c494ead2bfca6b796f111"
 dependencies = [
  "abi_stable",
  "anchor-lang",
