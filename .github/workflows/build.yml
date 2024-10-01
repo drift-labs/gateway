@@ -33,10 +33,20 @@ jobs:
           rustup install 1.76.0-x86_64-unknown-linux-gnu
       - name: Format
         run: cargo fmt --all -- --check
+      - uses: ubicloud/rust-cache@v2
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: |
           cargo -V
-          cargo check
+          cargo build
+          ldd ./target/debug/drift-gateway
+          ./target/debug/drift-gateway -v
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
