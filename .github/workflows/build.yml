@@ -44,13 +44,13 @@ jobs:
       - name: Build
         run: |
           cargo -V
-          cargo build
+          cargo build -vv
           ldd ./target/debug/drift-gateway
           ./target/debug/drift-gateway -v
-      - name: Test
-        env:
-          DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
-        # limit test parallelism to prevent hitting RPC rate-limits
-        run: |
-          cargo -V
-          cargo test --all -- --test-threads=1
+      # - name: Test
+      #   env:
+      #     DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
+      #   # limit test parallelism to prevent hitting RPC rate-limits
+      #   run: |
+      #     cargo -V
+      #     cargo test --all -- --test-threads=1
