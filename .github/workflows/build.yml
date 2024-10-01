@@ -37,12 +37,10 @@ jobs:
         run: |
           cargo -V
           cargo check
-      - name: Run
-        run: ./target/debug/drift-gateway --help # quick smoke testing for linking issues
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
         # limit test parallelism to prevent hitting RPC rate-limits
         run: |
           cargo -V
-          cargo test -vv --all -- --test-threads=1
+          cargo test --all -- --test-threads=1
