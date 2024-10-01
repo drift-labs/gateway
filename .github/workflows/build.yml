@@ -45,8 +45,9 @@ jobs:
         run: |
           cargo -V
           cargo build -vv
+          ./target/debug/drift-gateway -v || true
           ldd ./target/debug/drift-gateway
-          ./target/debug/drift-gateway -v
+          objdump -x ./target/debug/drift-gateway | grep PATH || true
       # - name: Test
       #   env:
       #     DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
