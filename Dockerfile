@@ -10,7 +10,8 @@ RUN rustup component add rustfmt && rustup install 1.76.0-x86_64-unknown-linux-g
 # a) default: use prebuilt lib (faster build time)
 # RUN CARGO_DRIFT_FFI_PATH="/usr/local/lib" cargo build --debug
 # b) build libdrift_ffi from source (slower build time)
-RUN CARGO_DRIFT_FFI_STATIC="1" cargo check
+RUN CARGO_DRIFT_FFI_STATIC=1 cargo build
+RUN ./target/debug/drift-gateway --help
 
 RUN cp /lib/x86_64-linux-gnu/libgcc_s.so.1 /build/target/debug/
 
