@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - "master"
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  docker:
+    runs-on: ubicloud
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v2
+      - name: Build image
+        run: |
+          VERSION_TAG=$(grep -Po -m1 '\d.\d.\d' Cargo.toml)
+          docker build -f Dockerfile .\
+            -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:latest"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish image
+        run: |
+          docker login ${REGISTRY} -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
+          docker image push --all-tags "${REGISTRY}/${IMAGE_NAME}"
+        env:
+          DOCKER_USERNAME: ${{ github.actor }}
+          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}

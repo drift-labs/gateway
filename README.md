@@ -36,6 +36,18 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ### From Docker
 
+Use prebuilt image, ghcr.io:
+```bash
+# authenticate to github container registry
+docker login -u <GITHUB_USERNAME> -P <GITHUB_PAT_TOKEN>
+# run image
+docker run \
+  -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
+  -p 8080:8080 \
+  --platform linux/x86_64 \
+  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0
+```
+
 Build the Docker image:
 
 ```bash
@@ -60,6 +72,7 @@ docker run \
 Build:
 
 Supports latest rust stable
+
 ⚠️ requires an `x86_64` arch toolchain e.g. `1.81.0-x86_64-unknown-linux-gnu`
 
 ```bash
@@ -73,7 +86,6 @@ CARGO_DRIFT_FFI_PATH='/usr/local/lib' cargo build --release
 ```
 
 Run:
-
 ```bash
 # configure the gateway signing key
 export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
