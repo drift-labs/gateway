@@ -402,9 +402,6 @@ mod tests {
 
     use self::controller::create_wallet;
     use super::*;
-    use crate::types::Market;
-
-    const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";
 
     fn get_seed() -> String {
         std::env::var("DRIFT_GATEWAY_KEY")
@@ -418,7 +415,9 @@ mod tests {
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None, None, false).await
+        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        AppState::new(&rpc_endpoint, true, wallet, None, None, false).await
     }
 
     #[actix_web::test]

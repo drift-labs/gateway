@@ -52,8 +52,9 @@ jobs:
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
-        # limit test parallelism to prevent hitting RPC rate-limits
+          TEST_RPC_ENDPOINT: ${{ secrets.DEVNET_RPC_ENDPOINT }}
+        # --test-threads, limit parallelism to prevent hitting RPC rate-limits
         run: |
           cargo -V
           cp libdrift_ffi_sys.so ./target/debug/deps
-          cargo test --all -- --test-threads=1
+          cargo test --all -- --test-threads=2
