@@ -373,7 +373,8 @@ struct GatewayConfig {
     /// http keep-alive timeout in seconds
     #[argh(option, default = "3600")]
     keep_alive_timeout: u32,
-    /// use delegated signing mode, provide the delegator's pubkey
+    /// use delegated signing mode, provide the delegator's pubkey (i.e the main account)
+    /// 'DRIFT_GATEWAY_KEY' should be set to the delegate's private key
     #[argh(option)]
     delegate: Option<String>,
     /// run the gateway in read-only mode for given authority pubkey
@@ -418,6 +419,44 @@ mod tests {
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
         AppState::new(&rpc_endpoint, true, wallet, None, None, false).await
+    }
+
+    // likely safe to ignore during development, mainy regression tests for CI
+    #[actix_web::test]
+    async fn delegated_signing_ok() {
+        let _ = env_logger::try_init();
+        let delegated_seed =
+            std::env::var("TEST_DELEGATED_SIGNER").expect("delegated signing key set");
+        let wallet = create_wallet(
+            Some(delegated_seed),
+            None,
+            Some(
+                "GiMXQkJXLVjScmQDkoLJShBJpTh9SDPvT2AZQq8NyEBf"
+                    .try_into()
+                    .unwrap(),
+            ),
+        );
+
+        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        let state = AppState::new(&rpc_endpoint, true, wallet, None, None, false).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .service(cancel_orders),
+        )
+        .await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let req = test::TestRequest::default()
+            .method(Method::DELETE)
+            .uri("/orders")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        dbg!(resp.response().body());
+        assert!(resp.status().is_success());
     }
 
     #[actix_web::test]
