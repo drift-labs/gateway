@@ -2,12 +2,17 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
-use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
-    math::liquidation::{CollateralInfo, MarginRequirementInfo},
+use drift_rs::{
+    constants::ProgramData,
+    math::{
+        constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
+        liquidation::{CollateralInfo, MarginRequirementInfo},
+    },
     types::{
-        self as sdk_types, MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PerpMarket,
-        PositionDirection, PostOnlyParam, SpotMarket,
+        self as sdk_types,
+        accounts::{PerpMarket, SpotMarket},
+        MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
+        PostOnlyParam,
     },
 };
 use rust_decimal::Decimal;
@@ -111,17 +116,14 @@ pub struct SpotPosition {
 }
 
 impl SpotPosition {
-    pub fn from_sdk_type(
-        value: &sdk_types::SpotPosition,
-        spot_market: &sdk_types::SpotMarket,
-    ) -> Self {
+    pub fn from_sdk_type(position: &sdk_types::SpotPosition, spot_market: &SpotMarket) -> Self {
         // TODO: handle error
-        let token_amount = value.get_token_amount(spot_market).expect("ok");
+        let token_amount = position.get_token_amount(spot_market).expect("ok");
         Self {
             amount: Decimal::from_i128_with_scale(token_amount as i128, spot_market.decimals)
                 .normalize(),
-            market_index: value.market_index,
-            balance_type: if value.balance_type == Default::default() {
+            market_index: position.market_index,
+            balance_type: if position.balance_type == Default::default() {
                 "deposit".into()
             } else {
                 "borrow".into()
@@ -571,8 +573,8 @@ impl From<CollateralInfo> for UserCollateralResponse {
 mod tests {
     use std::str::FromStr;
 
-    use drift_sdk::{
-        constants::BASE_PRECISION,
+    use drift_rs::{
+        math::constants::BASE_PRECISION,
         types::{MarketType, OrderType, PositionDirection},
     };
 
@@ -644,8 +646,8 @@ mod tests {
         assert_eq!(order.price, 0);
         assert_eq!(order.oracle_price_offset, Some(-500_000));
 
-        let o = drift_sdk::types::Order {
-            base_asset_amount: 1 * BASE_PRECISION,
+        let o = drift_rs::types::Order {
+            base_asset_amount: 1 * BASE_PRECISION as u64,
             price: 0,
             market_index: 0,
             market_type: MarketType::Perp,
@@ -666,7 +668,7 @@ mod tests {
             (5_123_456_789, Decimal::from_str("5.123456789").unwrap(), 9),
         ];
         for (input, expected, base_decimals) in cases {
-            let o = drift_sdk::types::Order {
+            let o = drift_rs::types::Order {
                 base_asset_amount: input,
                 price: input,
                 market_type: MarketType::Perp,

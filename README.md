@@ -34,32 +34,6 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
 
-### From Source
-
-Build:
-
-supports rust <= 1.76.0
-
-```bash
-# make a release build from source
-cargo build --release
-```
-
-Run:
-
-```bash
-# configure the gateway signing key
-export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
-
-# '--dev' to toggle devnet markets (default is mainnet)
-# ensure the RPC node is also using the matching devnet or mainnet
-drift-gateway --dev https://api.devnet.solana.com
-
-# or mainnet
-# NB: `api.mainnet-beta.solana.com` is not recommend for production use cases
-drift-gateway https://rpc-provider.example.com
-```
-
 ### From Docker
 
 Use prebuilt image, ghcr.io:
@@ -67,7 +41,11 @@ Use prebuilt image, ghcr.io:
 # authenticate to github container registry
 docker login -u <GITHUB_USERNAME> -P <GITHUB_PAT_TOKEN>
 # run image
-docker run -p 8080:8080 --platform linux/x86_64 ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0
+docker run \
+  -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
+  -p 8080:8080 \
+  --platform linux/x86_64 \
+  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0
 ```
 
 Build the Docker image:
@@ -82,7 +60,43 @@ docker build -f Dockerfile . -t drift-gateway --platform linux/x86_64
 Run the image:
 
 ```bash
-docker run -e DRIFT_GATEWAY_KEY=<BASE58_SEED> -p 8080:8080 drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
+docker run \
+  -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
+  -e RUST_LOG=info \
+  -p 8080:8080 \
+  drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
+```
+
+### From Source
+
+Build:
+
+Supports latest rust stable
+
+⚠️ requires an `x86_64` arch toolchain e.g. `1.81.0-x86_64-unknown-linux-gnu`
+
+```bash
+# install libdrift_ffi
+curl -L https://github.com/user-attachments/files/17126152/libdrift_ffi_sys.so.zip > ffi.zip &&\
+  unzip ffi.zip &&\
+  ln -sf libdrift_ffi_sys.so /usr/local/lib
+
+# make a release build from source
+CARGO_DRIFT_FFI_PATH='/usr/local/lib' cargo build --release
+```
+
+Run:
+```bash
+# configure the gateway signing key
+export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
+
+# '--dev' to toggle devnet markets (default is mainnet)
+# ensure the RPC node is also using the matching devnet or mainnet
+drift-gateway --dev https://api.devnet.solana.com
+
+# or mainnet
+# NB: `api.mainnet-beta.solana.com` is not recommend for production use cases
+drift-gateway https://rpc-provider.example.com
 ```
 
 ## Usage
@@ -530,7 +544,7 @@ Returns solana tx signature on success
 
 ```bash
 # cancel all by market id
-$ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}}'
+$ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"marketIndex":1,"marketType":"spot"}'
 # cancel by order ids
 $ curl localhost:8080/v2/orders -X DELETE -H 'content-type: application/json' -d '{"ids":[1,2,3,4]}'
 # cancel by user assigned order ids

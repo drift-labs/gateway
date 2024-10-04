@@ -1,20 +1,23 @@
 use std::{borrow::Cow, str::FromStr, sync::Arc};
 
-use drift_sdk::{
-    constants::{ProgramData, BASE_PRECISION},
-    event_subscriber::{try_parse_log, CommitmentConfig},
+use drift_rs::{
+    constants::ProgramData,
+    drift_idl::types::{MarginRequirementType, MarketType},
+    event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     math::{
+        constants::BASE_PRECISION,
         leverage::get_leverage,
         liquidation::{
             calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
-            calculate_margin_requirements, MarginCategory,
+            calculate_margin_requirements,
         },
     },
+    priority_fee_subscriber::PriorityFeeSubscriber,
     types::{
-        self, MarketId, MarketType, ModifyOrderParams, RpcSendTransactionConfig, SdkError,
+        self, MarketId, ModifyOrderParams, OrderStatus, RpcSendTransactionConfig, SdkError,
         VersionedMessage,
     },
-    AccountProvider, DriftClient, Pubkey, RpcAccountProvider, TransactionBuilder, Wallet,
+    DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
 use log::{debug, warn};
 use rust_decimal::Decimal;
@@ -54,13 +57,14 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
-    pub client: Arc<DriftClient<RpcAccountProvider>>,
+    pub client: Arc<DriftClient>,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
     default_subaccount_id: u16,
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
+    priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
 }
 
 impl AppState {
@@ -96,16 +100,27 @@ impl AppState {
             types::Context::MainNet
         };
 
-        let account_provider = RpcAccountProvider::with_commitment(endpoint, state_commitment);
-        let mut client = DriftClient::new(context, account_provider, wallet.clone())
+        let rpc_client = RpcClient::new_with_commitment(endpoint.into(), state_commitment);
+        let client = DriftClient::new(context, rpc_client, wallet.clone())
             .await
             .expect("ok");
         client.subscribe().await.expect("subd onchain data");
-        client
-            .add_user(default_subaccount_id.unwrap_or(0))
-            .await
-            .expect("user sub");
 
+        let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
+        if let Err(err) = client.subscribe_account(&default_subaccount_address).await {
+            log::error!("couldn't subscribe to user updates: {err:?}");
+        } else {
+            log::info!("subscribed to subaccount: {default_subaccount_address}");
+        }
+
+        let priority_fee_subscriber = PriorityFeeSubscriber::new(
+            endpoint.to_string(),
+            &[client
+                .get_perp_market_account(0)
+                .expect("market exists")
+                .pubkey],
+        )
+        .subscribe();
         Self {
             delegated: wallet.is_delegated(),
             wallet,
@@ -113,6 +128,7 @@ impl AppState {
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
+            priority_fee_subscriber,
         }
     }
 
@@ -142,14 +158,9 @@ impl AppState {
         req: CancelOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
-        let pf = get_priority_fee(&self.client).await;
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let pf = self.get_priority_fee();
+
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority_fee: {priority_fee:?}");
         let builder = TransactionBuilder::new(
@@ -169,51 +180,44 @@ impl AppState {
         ctx: Context,
         req: Option<GetPositionsRequest>,
     ) -> GatewayResult<GetPositionsResponse> {
-        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = match self
+        let (all_spot, all_perp) = self
             .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
+            .all_positions(&self.resolve_sub_account(ctx.sub_account_id))
+            .await?;
 
-        let spot_positions = user
-            .spot_positions
+        // calculating spot token balance requires knowing the 'spot market account' data
+        let filtered_spot_positions = all_spot
             .iter()
             .filter(|p| {
-                !p.is_available()
-                    || req.as_ref().is_some_and(|r| {
-                        r.market.market_index == p.market_index
-                            && r.market.market_type == MarketType::Perp
-                    })
+                if let Some(GetPositionsRequest { ref market }) = req {
+                    p.market_index == market.market_index && MarketType::Spot == market.market_type
+                } else {
+                    true
+                }
             })
             .map(|x| {
-                // calculating spot token balance requires knowing the 'spot market account' data
                 let spot_market_info = self
                     .client
                     .get_spot_market_account(x.market_index)
-                    .expect("spot market exists");
+                    .expect("spot market");
                 SpotPosition::from_sdk_type(x, &spot_market_info)
             })
             .collect();
 
-        let perp_positions = user
-            .perp_positions
-            .into_iter()
-            .filter(|p| {
-                !p.is_available()
-                    || req.as_ref().is_some_and(|r| {
-                        r.market.market_index == p.market_index
-                            && r.market.market_type == MarketType::Perp
-                    })
-            })
-            .map(Into::into)
-            .collect();
-
         Ok(GetPositionsResponse {
-            spot: spot_positions,
-            perp: perp_positions,
+            spot: filtered_spot_positions,
+            perp: all_perp
+                .into_iter()
+                .filter(|p| {
+                    if let Some(GetPositionsRequest { ref market }) = req {
+                        p.market_index == market.market_index
+                            && MarketType::Perp == market.market_type
+                    } else {
+                        true
+                    }
+                })
+                .map(Into::into)
+                .collect(),
         })
     }
 
@@ -240,13 +244,13 @@ impl AppState {
     pub async fn get_collateral(
         &self,
         ctx: Context,
-        margin_category: Option<MarginCategory>,
+        margin_requirement_type: MarginRequirementType,
     ) -> GatewayResult<UserCollateralResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         calculate_collateral(
             &self.client,
             &self.client.get_user_account(&sub_account).await?,
-            margin_category.unwrap_or(MarginCategory::Maintenance),
+            margin_requirement_type,
         )
         .map(Into::into)
         .map_err(ControllerError::Sdk)
@@ -258,27 +262,22 @@ impl AppState {
         market: Market,
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = match self
+        let user = self.client.get_user_account(&sub_account).await?;
+        let oracle_price = self
             .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
-        let perp_position = user.get_perp_position(market.market_index);
+            .oracle_price(MarketId::perp(market.market_index))
+            .await?;
+        let perp_position = user
+            .perp_positions
+            .iter()
+            .find(|p| p.market_index == market.market_index && !p.is_available());
 
-        let oracle = self
-            .client
-            .get_oracle_price_data_and_slot_for_perp_market(market.market_index)
-            .expect("oracle");
-
-        if let Ok(perp_position) = perp_position {
+        if let Some(perp_position) = perp_position {
             let result = calculate_liquidation_price_and_unrealized_pnl(
                 &self.client,
                 &user,
                 market.market_index,
             )?;
-            let oracle_price = oracle.data.price;
             let unsettled_pnl = Decimal::from_i128_with_scale(
                 perp_position
                     .get_unrealized_pnl(oracle_price)
@@ -307,19 +306,12 @@ impl AppState {
         req: Option<GetOrdersRequest>,
     ) -> GatewayResult<GetOrdersResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
+        let user = self.client.get_user_account(&sub_account).await?;
 
-        // TODO: export SDK type
         let orders: Vec<types::Order> = user
             .orders
             .into_iter()
-            .filter(|o| o.status as u8 == 1)
+            .filter(|o| o.status == OrderStatus::Open)
             .collect();
 
         Ok(GetOrdersResponse {
@@ -358,8 +350,8 @@ impl AppState {
         market_index: u16,
     ) -> GatewayResult<MarketInfoResponse> {
         let perp = self.client.get_perp_market_info(market_index).await?;
-        let open_interest = (perp.get_open_interest() / BASE_PRECISION as u128) as u64;
-        let max_open_interest = (perp.amm.max_open_interest / BASE_PRECISION as u128) as u64;
+        let open_interest = (perp.get_open_interest() / BASE_PRECISION) as u64;
+        let max_open_interest = (perp.amm.max_open_interest.as_u128() / BASE_PRECISION) as u64;
 
         Ok(MarketInfoResponse {
             open_interest,
@@ -383,14 +375,8 @@ impl AppState {
             .collect();
 
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
-        let pf = get_priority_fee(&self.client).await;
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let pf = self.get_priority_fee();
 
         let builder = TransactionBuilder::new(
             self.client.program_data(),
@@ -414,11 +400,8 @@ impl AppState {
         req: PlaceOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let (account_data, pf) = tokio::join!(
-            self.client.get_user_account(&sub_account),
-            get_priority_fee(&self.client)
-        );
-
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let pf = self.get_priority_fee();
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority fee: {priority_fee:?}");
 
@@ -433,7 +416,7 @@ impl AppState {
         let tx = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
-            Cow::Owned(account_data?),
+            Cow::Owned(account_data),
             self.delegated,
         )
         .with_priority_fee(priority_fee, ctx.cu_limit)
@@ -449,15 +432,8 @@ impl AppState {
         req: ModifyOrdersRequest,
     ) -> GatewayResult<TxResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let account_data = match self
-            .client
-            .get_user(ctx.sub_account_id.unwrap_or(self.default_subaccount_id))
-        {
-            Some(user) => user.get_user_account(),
-            None => self.client.get_user_account(&sub_account).await?,
-        };
-        let pf = get_priority_fee(&self.client).await;
-
+        let account_data = self.client.get_user_account(&sub_account).await?;
+        let pf = self.get_priority_fee();
         let builder = TransactionBuilder::new(
             self.client.program_data(),
             sub_account,
@@ -535,17 +511,16 @@ impl AppState {
         }
     }
 
+    fn get_priority_fee(&self) -> u64 {
+        self.priority_fee_subscriber.priority_fee_nth(0.9)
+    }
+
     async fn send_tx(
         &self,
         tx: VersionedMessage,
         reason: &'static str,
     ) -> GatewayResult<TxResponse> {
-        let (recent_block_hash, _) = self
-            .client
-            .inner()
-            .get_latest_blockhash_with_commitment(CommitmentConfig::finalized())
-            .await
-            .map_err(SdkError::from)?;
+        let recent_block_hash = self.client.get_latest_blockhash().await?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
         let tx_config = RpcSendTransactionConfig {
             max_retries: Some(0),
@@ -684,44 +659,5 @@ pub fn create_wallet(
         _ => {
             panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
-    }
-}
-
-/// get priority fee estimated from chain
-async fn get_priority_fee<T: AccountProvider>(client: &DriftClient<T>) -> u64 {
-    let mut priority_fee = 1_000_u64;
-    // use sol-perp market as proxy for local-ish drift fee market
-    if let Ok(mut recent_fees) = client
-        .get_recent_priority_fees(&[MarketId::perp(0)], Some(100))
-        .await
-    {
-        recent_fees.sort_unstable();
-        let idx = (recent_fees.len() * 90) / 100; // 90-th percentile
-        priority_fee = recent_fees[idx];
-    } else {
-        warn!(target: "controller", "failed to fetch live priority fee");
-    }
-
-    priority_fee
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[ignore]
-    #[tokio::test]
-    async fn test_pf() {
-        // flakey needs a mainnet RPC getProgramAccounts
-        let account_provider = RpcAccountProvider::new("https://api.devnet.solana.com");
-        let client = DriftClient::new(
-            types::Context::DevNet,
-            account_provider,
-            Wallet::read_only(Pubkey::new_unique()),
-        )
-        .await
-        .unwrap();
-
-        assert!(get_priority_fee(&client).await > 0);
     }
 }

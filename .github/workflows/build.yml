@@ -20,34 +20,41 @@ on:
 
 jobs:
   format-build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud
     timeout-minutes: 45
     steps:
       - name: Check out
         uses: actions/checkout@v2
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.76.0
-          components: rustfmt
-          default: true
-      - name: Init Cargo Cache
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Config rust toolchain
+        run: |
+          rustup update stable && rustup default stable
+          rustup component add rustfmt
+          rustup show active-toolchain
+          rustup install 1.76.0-x86_64-unknown-linux-gnu
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: install libdrift_ffi_sys
+        run: |
+          curl -L https://github.com/user-attachments/files/17126152/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
+          sudo cp libdrift_ffi_sys.so /usr/lib/
+      - uses: ubicloud/rust-cache@v2
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
-            target/            
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Format
-        run: cargo fmt --all -- --check
       - name: Build
-        run: cargo check --all
+        run: |
+          cargo -V
+          cargo check
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
-        # limit test parallelism to prevent hitting RPC rate-limits
-        run: cargo test --all -- --test-threads=1
+          TEST_RPC_ENDPOINT: ${{ secrets.DEVNET_RPC_ENDPOINT }}
+        # --test-threads, limit parallelism to prevent hitting RPC rate-limits
+        run: |
+          cargo -V
+          cp libdrift_ffi_sys.so ./target/debug/deps
+          cargo test --all -- --test-threads=2

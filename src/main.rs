@@ -8,12 +8,18 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
-use controller::{create_wallet, AppState, ControllerError};
-use drift_sdk::{types::CommitmentConfig, Pubkey};
+use drift_rs::{
+    types::{CommitmentConfig, MarginRequirementType},
+    Pubkey,
+};
 use log::{debug, info, warn};
 use serde_json::json;
-use types::{
-    CancelAndPlaceRequest, CancelOrdersRequest, Market, ModifyOrdersRequest, PlaceOrdersRequest,
+
+use crate::{
+    controller::{create_wallet, AppState, ControllerError},
+    types::{
+        CancelAndPlaceRequest, CancelOrdersRequest, Market, ModifyOrdersRequest, PlaceOrdersRequest,
+    },
 };
 
 mod controller;
@@ -193,7 +199,11 @@ async fn get_collateral(
     controller: web::Data<AppState>,
     ctx: web::Query<Context>,
 ) -> impl Responder {
-    handle_result(controller.get_collateral(ctx.0, None).await)
+    handle_result(
+        controller
+            .get_collateral(ctx.0, MarginRequirementType::Maintenance)
+            .await,
+    )
 }
 
 #[actix_web::main]
@@ -393,8 +403,6 @@ mod tests {
     use self::controller::create_wallet;
     use super::*;
 
-    const TEST_ENDPOINT: &str = "https://api.devnet.solana.com";
-
     fn get_seed() -> String {
         std::env::var("DRIFT_GATEWAY_KEY")
             .expect("DRIFT_GATEWAY_KEY is set")
@@ -407,7 +415,9 @@ mod tests {
         } else {
             create_wallet(None, emulate, None)
         };
-        AppState::new(TEST_ENDPOINT, true, wallet, None, None, false).await
+        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        AppState::new(&rpc_endpoint, true, wallet, None, None, false).await
     }
 
     #[actix_web::test]
