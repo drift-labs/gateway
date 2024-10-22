@@ -1785,7 +1785,8 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=ec23c14#ec23c14a557954272df9f6fe17650fec60f68293"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecc2569cbb26ccd8e1b6dd0cf2d9bf92cfefa0b7e085a03d4be1e7ab84962f11"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1797,8 +1798,9 @@ dependencies = [
 
 [[package]]
 name = "drift-rs"
-version = "1.0.0-alpha.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=ec23c14#ec23c14a557954272df9f6fe17650fec60f68293"
+version = "1.0.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "182cb663e5a31d5fa131da49b2d82d9db8ae21d0692e9f08a24ad0a29e316cef"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",

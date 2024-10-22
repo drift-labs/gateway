@@ -787,9 +787,11 @@ error responses have the following JSON structure:
 Some endpoints send transactions to the drift program and can return program error codes.
 The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)
 
-### Common Errors
+### FAQ / Common Errors
 
-`AccountNotFound` usually means the drift user (sub)account has not been initialized.
+### `AccountNotFound`
+
+Usually means the drift user (sub)account has not been initialized.
 Use the UI or Ts/Python sdk to initialize the sub-account first.
 
 ```json
@@ -799,8 +801,18 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
 }
 ```
 
-The free \_api.mainnet-beta.solana.com_RPC cannot be used due to rate-limits on `getProgramAccounts` calls
+#### `429`s / gateway hitting RPC rate limits
+
+this can occur during gateway startup as drift market data is pulled from the network and subscriptions are intialized.  
+try setting `RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.  
+
+The free \_api.mainnet-beta.solana.com_ RPC support is limited due to rate-limits
 
 ```rust
-Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(410), ...
+Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(429), ...
 ```
+
+#### Slow queries
+
+Queries longer than a few _ms_ may be due to missing market subscriptions.  
+Ensure gateway is properly configured with intended markets. 
