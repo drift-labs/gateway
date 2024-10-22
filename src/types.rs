@@ -31,8 +31,8 @@ pub struct Order {
     order_type: sdk_types::OrderType,
     market_index: u16,
     #[serde(
-        serialize_with = "market_type_ser",
-        deserialize_with = "market_type_de"
+        serialize_with = "ser_market_type",
+        deserialize_with = "de_market_type"
     )]
     market_type: MarketType,
     amount: Decimal,
@@ -55,7 +55,7 @@ impl Order {
 
         Order {
             market_index: value.market_index,
-            market_type: value.market_type,
+            market_type: value.market_type.into(),
             price: Decimal::new(value.price as i64, PRICE_DECIMALS),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
             filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
@@ -263,26 +263,28 @@ pub struct PlaceOrder {
     max_ts: Option<i64>,
 }
 
-fn market_type_ser<S>(market_type: &sdk_types::MarketType, serializer: S) -> Result<S::Ok, S::Error>
+pub fn ser_market_type<S>(x: &MarketType, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let s = match market_type {
-        sdk_types::MarketType::Spot => "spot",
-        sdk_types::MarketType::Perp => "perp",
-    };
-    serializer.serialize_str(s)
+    s.serialize_str(match x {
+        MarketType::Perp => "perp",
+        MarketType::Spot => "spot",
+    })
 }
 
-fn market_type_de<'de, D>(deserializer: D) -> Result<sdk_types::MarketType, D::Error>
+pub fn de_market_type<'de, D>(deserializer: D) -> Result<MarketType, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let market_type = Deserialize::deserialize(deserializer)?;
-    match market_type {
-        "spot" => Ok(sdk_types::MarketType::Spot),
-        "perp" => Ok(sdk_types::MarketType::Perp),
-        _ => Err(serde::de::Error::custom("invalid market type")),
+    let s = String::deserialize(deserializer)?;
+    match s.as_str() {
+        "perp" => Ok(MarketType::Perp),
+        "spot" => Ok(MarketType::Spot),
+        _ => Err(serde::de::Error::custom(format!(
+            "unknown market type: {}",
+            s
+        ))),
     }
 }
 
@@ -310,7 +312,7 @@ impl PlaceOrder {
 
         OrderParams {
             market_index: self.market.market_index,
-            market_type: self.market.market_type,
+            market_type: self.market.market_type.into(),
             order_type: self.order_type,
             base_asset_amount: base_amount,
             direction: if self.amount.is_sign_negative() {
@@ -342,8 +344,8 @@ pub struct Market {
     /// The market index
     pub market_index: u16,
     #[serde(
-        serialize_with = "market_type_ser",
-        deserialize_with = "market_type_de"
+        serialize_with = "ser_market_type",
+        deserialize_with = "de_market_type"
     )]
     /// The market type (Spot or Perp)
     pub market_type: MarketType,
@@ -650,7 +652,7 @@ mod tests {
             base_asset_amount: 1 * BASE_PRECISION as u64,
             price: 0,
             market_index: 0,
-            market_type: MarketType::Perp,
+            market_type: MarketType::Perp.into(),
             oracle_price_offset: -500_000,
             ..Default::default()
         };
@@ -671,7 +673,7 @@ mod tests {
             let o = drift_rs::types::Order {
                 base_asset_amount: input,
                 price: input,
-                market_type: MarketType::Perp,
+                market_type: MarketType::Perp.into(),
                 ..Default::default()
             };
             let gateway_order = Order::from_sdk_order(o, base_decimals);

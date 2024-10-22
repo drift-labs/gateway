@@ -248,7 +248,7 @@ async fn main() -> std::io::Result<()> {
     if delegate.is_some() {
         info!(
             target: LOG_TARGET,
-            "🪪: authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
+            "🪪 authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
             state.authority(),
             state.default_sub_account(),
             state.signer(),
@@ -256,7 +256,7 @@ async fn main() -> std::io::Result<()> {
     } else {
         info!(
             target: LOG_TARGET,
-            "🪪: authority: {:?}, default sub-account: {:?}",
+            "🪪 authority: {:?}, default sub-account: {:?}",
             state.authority(),
             state.default_sub_account()
         );
