@@ -9,7 +9,7 @@ use actix_web::{
 };
 use argh::FromArgs;
 use drift_rs::{
-    types::{CommitmentConfig, MarginRequirementType},
+    types::{CommitmentConfig, MarginRequirementType, MarketId},
     Pubkey,
 };
 use log::{debug, info, warn};
@@ -240,6 +240,14 @@ async fn main() -> std::io::Result<()> {
     )
     .await;
 
+    // start market+oracle subs
+    let mut markets = Vec::<MarketId>::default();
+    if let Some(ref user_markets) = config.markets {
+        markets.extend(parse_markets(&state.client, user_markets).expect("valid markets"));
+    };
+    state.subscribe_market_data(&markets).await;
+    info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
+
     info!(
         target: LOG_TARGET,
         "🏛️ gateway listening at http://{}:{}", config.host, config.port
@@ -358,6 +366,11 @@ struct GatewayConfig {
     /// the solana RPC URL
     #[argh(positional)]
     rpc_host: String,
+    /// list of markets to trade
+    /// e.g '--markets sol-perp,wbtc,pyusd'
+    /// gateway creates market subscriptions for responsive trading
+    #[argh(option)]
+    markets: Option<String>,
     /// run in devnet mode
     #[argh(switch)]
     dev: bool,
@@ -373,7 +386,8 @@ struct GatewayConfig {
     /// http keep-alive timeout in seconds
     #[argh(option, default = "3600")]
     keep_alive_timeout: u32,
-    /// use delegated signing mode, provide the delegator's pubkey (i.e the main account)
+    /// use delegated signing mode
+    /// provide the delegator's pubkey (i.e the main account)
     /// 'DRIFT_GATEWAY_KEY' should be set to the delegate's private key
     #[argh(option)]
     delegate: Option<String>,
@@ -389,12 +403,28 @@ struct GatewayConfig {
     /// default sub_account_id to use (default: 0)
     #[argh(option, default = "0")]
     default_sub_account_id: u16,
-    /// enable debug logging
-    #[argh(switch)]
-    verbose: bool,
     /// skip tx preflight checks
     #[argh(switch)]
     skip_tx_preflight: bool,
+    /// enable debug logging
+    #[argh(switch)]
+    verbose: bool,
+}
+
+/// Parse raw markets list from user command
+fn parse_markets(client: &drift_rs::DriftClient, markets: &str) -> Result<Vec<MarketId>, ()> {
+    let mut configured_markets = Vec::<MarketId>::default();
+
+    for ticker in markets.split(",") {
+        if let Some(market) = client.market_lookup(ticker) {
+            configured_markets.push(market);
+        } else {
+            log::error!(target: LOG_TARGET, "invalid market: {ticker:?}");
+            return Err(());
+        }
+    }
+
+    Ok(configured_markets)
 }
 
 #[cfg(test)]

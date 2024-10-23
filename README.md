@@ -10,6 +10,8 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
     - [Environment Variables](#environment-variables)
     - [Delegated Signing Mode](#delegated-signing-mode)
     - [Sub-account Switching](#sub-account-switching)
+    - [Emulation Mode](#emulation-mode)
+    - [CU price/limits](#cu-price--limits)
 3. [API Examples](#api-examples)
     - [HTTP API](#http-api)
       - [`GET` Market Info](#get-market-info)
@@ -29,6 +31,8 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
     - [Websocket API](#websocket-api)
       - [Subscribing](#subscribing)
       - [Event Payloads](#event-payloads)
+  4. [Errors](#errors)
+  5. [FAQ](#faq)
 
 ## Build & Run
 
@@ -45,7 +49,7 @@ docker run \
   -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
   -p 8080:8080 \
   --platform linux/x86_64 \
-  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0
+  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0 --markets wbtc,drift
 ```
 
 Build the Docker image:
@@ -64,7 +68,7 @@ docker run \
   -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
   -e RUST_LOG=info \
   -p 8080:8080 \
-  drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0
+  drift-gateway https://api.mainnet-beta.solana.com --host 0.0.0.0 --markets wbtc,drift
 ```
 
 ### From Source
@@ -96,7 +100,7 @@ drift-gateway --dev https://api.devnet.solana.com
 
 # or mainnet
 # NB: `api.mainnet-beta.solana.com` is not recommend for production use cases
-drift-gateway https://rpc-provider.example.com
+drift-gateway https://rpc-provider.example.com --markets sol-perp,sol,weth
 ```
 
 ## Usage
@@ -110,6 +114,7 @@ These runtime environment variables are required:
 | Variable            | Description                               | Example Value                |
 |---------------------|-------------------------------------------|------------------------------|
 | `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair | `</PATH/TO/KEY.json>` or `seedBase58` |
+| `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
 
 ```bash
 Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
@@ -120,17 +125,28 @@ Positional Arguments:
   rpc_host          the solana RPC URL
 
 Options:
-  --dev                           run in devnet mode
-  --host                          gateway host address
-  --port                          gateway port
-  --ws-port                       gateway Ws port
-  --delegate                      use delegated signing mode, provide the delegators pubkey
-  --emulate                       run the gateway in read-only mode for given authority pubkey
-  --tx-commitment                 solana commitment level for transaction confirmation [processed|confirmed|finalized] (default: confirmed)
-  --commitment                    solana commitment level for state updates [processed|confirmed|finalized] (default: confirmed)
-  --default-sub-account-id        default sub-account ID for account related operations (default: 0)
-  --verbose                       enable debug logging
-  --skip-tx-preflight             skip tx preflight checks
+  --markets         list of markets to trade e.g '--markets sol-perp,wbtc,pyusd'
+                    gateway creates market subscriptions for responsive trading
+  --dev             run in devnet mode
+  --host            gateway host address
+  --port            gateway port
+  --ws-port         gateway Ws port
+  --keep-alive-timeout
+                    http keep-alive timeout in seconds
+  --delegate        use delegated signing mode provide the delegator's pubkey
+                    (i.e the main account) 'DRIFT_GATEWAY_KEY' should be set to
+                    the delegate's private key
+  --emulate         run the gateway in read-only mode for given authority pubkey
+  --tx-commitment   solana commitment level to use for transaction confirmation
+                    (default: confirmed)
+  --commitment      solana commitment level to use for state updates (default:
+                    confirmed)
+  --default-sub-account-id
+                    default sub_account_id to use (default: 0)
+  --skip-tx-preflight
+                    skip tx preflight checks
+  --verbose         enable debug logging
+  --help            display usage information
 ```
 
 ### Delegated Signing Mode
@@ -149,6 +165,14 @@ By default the gateway will perform all account operations on sub-account 0, you
 A `subAccountId` URL query parameter may be supplied to switch the sub-account per request basis.
 
 e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the wallet's sub-account 3
+
+## Emulation Mode
+
+Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
+
+The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
+
+note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
 
 ## CU Price & Limits
 
@@ -765,14 +789,6 @@ settled funding payment event for open perp positions
 }
 ```
 
-## Emulation Mode
-
-Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
-
-The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
-
-note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
-
 ### Errors
 
 error responses have the following JSON structure:
@@ -787,9 +803,9 @@ error responses have the following JSON structure:
 Some endpoints send transactions to the drift program and can return program error codes.
 The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)
 
-### FAQ / Common Errors
+### FAQ
 
-### `AccountNotFound`
+#### `AccountNotFound`
 
 Usually means the drift user (sub)account has not been initialized.
 Use the UI or Ts/Python sdk to initialize the sub-account first.
@@ -804,7 +820,7 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
 #### `429`s / gateway hitting RPC rate limits
 
 this can occur during gateway startup as drift market data is pulled from the network and subscriptions are intialized.  
-try setting `RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.  
+try setting `INIT_RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.  
 
 The free \_api.mainnet-beta.solana.com_ RPC support is limited due to rate-limits
 

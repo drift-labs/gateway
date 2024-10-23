@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
+use std::{borrow::Cow, collections::HashSet, str::FromStr, sync::Arc, time::Duration};
 
 use drift_rs::{
     constants::ProgramData,
@@ -85,6 +85,14 @@ impl AppState {
             .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
     }
 
+    /// Initialize Gateway Drift client
+    ///
+    /// * `endpoint` - Solana RPC node HTTP/S endpoint
+    /// * `devnet` - whether to run against devnet or not
+    /// * `wallet` - wallet to use for tx signing
+    /// * `commitment` - Slot finalisation/commitement levels
+    /// * `default_subaccount_id` - by default all queries will use this subaccount
+    /// * `skip_tx_preflight` - submit txs without checking preflight results
     pub async fn new(
         endpoint: &str,
         devnet: bool,
@@ -113,33 +121,6 @@ impl AppState {
             log::info!(target: LOG_TARGET, "subscribed to subaccount: {default_subaccount}");
         }
 
-        let (spot, perps) = client
-            .all_positions(&default_subaccount)
-            .await
-            .expect("loaded user positions");
-        let mut markets: Vec<MarketId> = spot
-            .iter()
-            .map(|s| MarketId::spot(s.market_index))
-            .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
-            .collect();
-        markets.push(MarketId::QUOTE_SPOT);
-
-        let rpc_throttle_s: u64 = std::env::var("RPC_THROTTLE")
-            .map(|s| s.parse().unwrap())
-            .unwrap_or(1);
-        info!(target: LOG_TARGET, "start market data subscriptions: {markets:?}");
-        tokio::time::sleep(Duration::from_secs(rpc_throttle_s)).await;
-        client
-            .subscribe_oracles(&markets)
-            .await
-            .expect("oracles subscribed");
-        tokio::time::sleep(Duration::from_secs(rpc_throttle_s)).await;
-        client
-            .subscribe_markets(&markets)
-            .await
-            .expect("markets subscribed");
-        tokio::time::sleep(Duration::from_secs(rpc_throttle_s)).await;
-
         let priority_fee_subscriber = PriorityFeeSubscriber::with_config(
             RpcClient::new_with_commitment(endpoint.into(), state_commitment),
             &[client
@@ -153,15 +134,15 @@ impl AppState {
             },
         );
 
-        if !wallet.is_emulating() {
-            tokio::time::sleep(Duration::from_secs(rpc_throttle_s)).await;
+        let priority_fee_subscriber = if !wallet.is_emulating() {
             client
                 .subscribe_blockhashes()
                 .await
                 .expect("blockhashes subscribed");
-        }
-
-        info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
+            priority_fee_subscriber.subscribe()
+        } else {
+            Arc::new(priority_fee_subscriber)
+        };
 
         Self {
             client: Arc::new(client),
@@ -169,13 +150,47 @@ impl AppState {
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
-            priority_fee_subscriber: if wallet.is_emulating() {
-                Arc::new(priority_fee_subscriber)
-            } else {
-                priority_fee_subscriber.subscribe()
-            },
+            priority_fee_subscriber,
             wallet,
         }
+    }
+
+    /// Start market and oracle data subscriptions
+    ///
+    /// * configured_markets - list of static markets provided by user
+    ///
+    /// additional subscriptions will be included based on user's current positions (on default subaccouunt)
+    pub(crate) async fn subscribe_market_data(&self, configured_markets: &[MarketId]) {
+        let (spot, perps) = self
+            .client
+            .all_positions(&self.default_sub_account())
+            .await
+            .expect("loaded user positions");
+
+        let mut user_markets: Vec<MarketId> = spot
+            .iter()
+            .map(|s| MarketId::spot(s.market_index))
+            .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
+            .collect();
+        user_markets.push(MarketId::QUOTE_SPOT); // usdc needed for most functions
+        user_markets.extend_from_slice(configured_markets);
+
+        let init_rpc_throttle: u64 = std::env::var("INIT_RPC_THROTTLE")
+            .map(|s| s.parse().unwrap())
+            .unwrap_or(1);
+
+        let markets = Vec::from_iter(HashSet::<MarketId>::from_iter(user_markets).into_iter());
+        info!(target: LOG_TARGET, "start market subscriptions: {markets:?}");
+        tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
+        self.client
+            .subscribe_oracles(&markets)
+            .await
+            .expect("oracles subscribed");
+        tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
+        self.client
+            .subscribe_markets(&markets)
+            .await
+            .expect("markets subscribed");
     }
 
     /// Return SOL balance of the tx signing account
@@ -729,6 +744,6 @@ trait WalletExt {
 impl WalletExt for Wallet {
     /// True if the wallet is running in emulation mode (unable to sign txs)
     fn is_emulating(&self) -> bool {
-        !self.is_delegated() && self.authority() != &self.signer()
+        self.authority() != &self.signer() && !self.is_delegated()
     }
 }
