@@ -231,8 +231,8 @@ pub(crate) enum AccountEvent {
         order_id: u32,
         market_index: u16,
         #[serde(
-            serialize_with = "ser_market_type",
-            deserialize_with = "de_market_type"
+            serialize_with = "crate::types::ser_market_type",
+            deserialize_with = "crate::types::de_market_type"
         )]
         market_type: MarketType,
         ts: u64,
@@ -372,8 +372,8 @@ pub(crate) struct OrderWithDecimals {
     pub order_type: OrderType,
     /// Whether market is spot or perp
     #[serde(
-        serialize_with = "ser_market_type",
-        deserialize_with = "de_market_type"
+        serialize_with = "crate::types::ser_market_type",
+        deserialize_with = "crate::types::de_market_type"
     )]
     pub market_type: MarketType,
     /// User generated order id. Can make it easier to place/cancel orders
@@ -410,7 +410,7 @@ impl OrderWithDecimals {
             order_id: value.order_id,
             market_index: value.market_index,
             order_type: value.order_type,
-            market_type: value.market_type,
+            market_type: value.market_type.into(),
             user_order_id: value.user_order_id,
             direction: value.direction,
             reduce_only: value.reduce_only,
@@ -477,31 +477,6 @@ where
     }
 }
 
-fn ser_market_type<S>(x: &MarketType, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(match x {
-        MarketType::Perp => "perp",
-        MarketType::Spot => "spot",
-    })
-}
-
-fn de_market_type<'de, D>(deserializer: D) -> Result<MarketType, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    match s.as_str() {
-        "perp" => Ok(MarketType::Perp),
-        "spot" => Ok(MarketType::Spot),
-        _ => Err(serde::de::Error::custom(format!(
-            "unknown market type: {}",
-            s
-        ))),
-    }
-}
-
 /// Map drift-program events into gateway friendly types for events to the specific UserAccount
 pub(crate) fn map_drift_event_for_account(
     program_data: &ProgramData,
@@ -527,8 +502,10 @@ pub(crate) fn map_drift_event_for_account(
             tx_idx,
             ts,
         } => {
-            let decimals =
-                get_market_decimals(program_data, Market::new(*market_index, *market_type));
+            let decimals = get_market_decimals(
+                program_data,
+                Market::new(*market_index, (*market_type).into()),
+            );
             let fill = if *maker == Some(sub_account_address) {
                 Some(AccountEvent::fill(
                     maker_side.unwrap(),
@@ -542,7 +519,7 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *tx_idx,
                     *market_index,
-                    *market_type,
+                    (*market_type).into(),
                     (*maker).map(|x| x.to_string()),
                     Some(*maker_order_id),
                     Some(*maker_fee),
@@ -563,7 +540,7 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *tx_idx,
                     *market_index,
-                    *market_type,
+                    (*market_type).into(),
                     (*maker).map(|x| x.to_string()),
                     Some(*maker_order_id),
                     Some(*maker_fee),
@@ -637,7 +614,7 @@ pub(crate) fn map_drift_event_for_account(
         } => {
             let decimals = get_market_decimals(
                 program_data,
-                Market::new(order.market_index, order.market_type),
+                Market::new(order.market_index, order.market_type.into()),
             );
             (
                 Channel::Orders,

@@ -1,8 +1,8 @@
-use std::{borrow::Cow, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, str::FromStr, sync::Arc, time::Duration};
 
 use drift_rs::{
     constants::ProgramData,
-    drift_idl::types::{MarginRequirementType, MarketType},
+    drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     math::{
         constants::BASE_PRECISION,
@@ -12,14 +12,15 @@ use drift_rs::{
             calculate_margin_requirements,
         },
     },
-    priority_fee_subscriber::PriorityFeeSubscriber,
+    priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
     types::{
-        self, MarketId, ModifyOrderParams, OrderStatus, RpcSendTransactionConfig, SdkError,
-        VersionedMessage,
+        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
+        RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
     },
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use log::{debug, warn};
+use futures_util::{stream::FuturesUnordered, StreamExt};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
 use solana_sdk::signature::Signature;
@@ -84,6 +85,14 @@ impl AppState {
             .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
     }
 
+    /// Initialize Gateway Drift client
+    ///
+    /// * `endpoint` - Solana RPC node HTTP/S endpoint
+    /// * `devnet` - whether to run against devnet or not
+    /// * `wallet` - wallet to use for tx signing
+    /// * `commitment` - Slot finalisation/commitement levels
+    /// * `default_subaccount_id` - by default all queries will use this subaccount
+    /// * `skip_tx_preflight` - submit txs without checking preflight results
     pub async fn new(
         endpoint: &str,
         devnet: bool,
@@ -104,32 +113,84 @@ impl AppState {
         let client = DriftClient::new(context, rpc_client, wallet.clone())
             .await
             .expect("ok");
-        client.subscribe().await.expect("subd onchain data");
 
-        let default_subaccount_address = wallet.sub_account(default_subaccount_id.unwrap_or(0));
-        if let Err(err) = client.subscribe_account(&default_subaccount_address).await {
-            log::error!("couldn't subscribe to user updates: {err:?}");
+        let default_subaccount = wallet.sub_account(default_subaccount_id.unwrap_or(0));
+        if let Err(err) = client.subscribe_account(&default_subaccount).await {
+            log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}");
         } else {
-            log::info!("subscribed to subaccount: {default_subaccount_address}");
+            log::info!(target: LOG_TARGET, "subscribed to subaccount: {default_subaccount}");
         }
 
-        let priority_fee_subscriber = PriorityFeeSubscriber::new(
-            endpoint.to_string(),
+        let priority_fee_subscriber = PriorityFeeSubscriber::with_config(
+            RpcClient::new_with_commitment(endpoint.into(), state_commitment),
             &[client
-                .get_perp_market_account(0)
+                .program_data()
+                .perp_market_config_by_index(0)
                 .expect("market exists")
                 .pubkey],
-        )
-        .subscribe();
+            PriorityFeeSubscriberConfig {
+                refresh_frequency: Some(Duration::from_millis(400 * 10)),
+                window: None,
+            },
+        );
+
+        let priority_fee_subscriber = if !wallet.is_emulating() {
+            client
+                .subscribe_blockhashes()
+                .await
+                .expect("blockhashes subscribed");
+            priority_fee_subscriber.subscribe()
+        } else {
+            Arc::new(priority_fee_subscriber)
+        };
+
         Self {
-            delegated: wallet.is_delegated(),
-            wallet,
             client: Arc::new(client),
+            delegated: wallet.is_delegated(),
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
             priority_fee_subscriber,
+            wallet,
         }
+    }
+
+    /// Start market and oracle data subscriptions
+    ///
+    /// * configured_markets - list of static markets provided by user
+    ///
+    /// additional subscriptions will be included based on user's current positions (on default subaccouunt)
+    pub(crate) async fn subscribe_market_data(&self, configured_markets: &[MarketId]) {
+        let (spot, perps) = self
+            .client
+            .all_positions(&self.default_sub_account())
+            .await
+            .expect("loaded user positions");
+
+        let mut user_markets: Vec<MarketId> = spot
+            .iter()
+            .map(|s| MarketId::spot(s.market_index))
+            .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
+            .collect();
+        user_markets.push(MarketId::QUOTE_SPOT); // usdc needed for most functions
+        user_markets.extend_from_slice(configured_markets);
+
+        let init_rpc_throttle: u64 = std::env::var("INIT_RPC_THROTTLE")
+            .map(|s| s.parse().unwrap())
+            .unwrap_or(1);
+
+        let markets = Vec::from_iter(HashSet::<MarketId>::from_iter(user_markets).into_iter());
+        info!(target: LOG_TARGET, "start market subscriptions: {markets:?}");
+        tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
+        self.client
+            .subscribe_oracles(&markets)
+            .await
+            .expect("oracles subscribed");
+        tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
+        self.client
+            .subscribe_markets(&markets)
+            .await
+            .expect("markets subscribed");
     }
 
     /// Return SOL balance of the tx signing account
@@ -186,7 +247,7 @@ impl AppState {
             .await?;
 
         // calculating spot token balance requires knowing the 'spot market account' data
-        let filtered_spot_positions = all_spot
+        let filtered_spot_positions: Vec<&drift_idl::types::SpotPosition> = all_spot
             .iter()
             .filter(|p| {
                 if let Some(GetPositionsRequest { ref market }) = req {
@@ -195,12 +256,22 @@ impl AppState {
                     true
                 }
             })
-            .map(|x| {
-                let spot_market_info = self
-                    .client
-                    .get_spot_market_account(x.market_index)
-                    .expect("spot market");
-                SpotPosition::from_sdk_type(x, &spot_market_info)
+            .collect();
+
+        let spot_market_futs = filtered_spot_positions
+            .iter()
+            .map(|x| self.client.get_spot_market_account(x.market_index));
+
+        let spot_market_futs = FuturesUnordered::from_iter(spot_market_futs);
+        let spot_markets = spot_market_futs
+            .collect::<Vec<SdkResult<SpotMarket>>>()
+            .await;
+
+        let filtered_spot_positions = filtered_spot_positions
+            .iter()
+            .zip(spot_markets.iter())
+            .map(|(position, market)| {
+                SpotPosition::from_sdk_type(position, market.as_ref().expect("spot market"))
             })
             .collect();
 
@@ -263,6 +334,7 @@ impl AppState {
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let user = self.client.get_user_account(&sub_account).await?;
+
         let oracle_price = self
             .client
             .oracle_price(MarketId::perp(market.market_index))
@@ -319,7 +391,8 @@ impl AppState {
                 .into_iter()
                 .filter(|o| {
                     if let Some(GetOrdersRequest { ref market }) = req {
-                        o.market_index == market.market_index && o.market_type == market.market_type
+                        o.market_index == market.market_index
+                            && o.market_type == market.market_type.into()
                     } else {
                         true
                     }
@@ -327,7 +400,7 @@ impl AppState {
                 .map(|o| {
                     let base_decimals = get_market_decimals(
                         self.client.program_data(),
-                        Market::new(o.market_index, o.market_type),
+                        Market::new(o.market_index, o.market_type.into()),
                     );
                     Order::from_sdk_order(o, base_decimals)
                 })
@@ -349,7 +422,7 @@ impl AppState {
         &self,
         market_index: u16,
     ) -> GatewayResult<MarketInfoResponse> {
-        let perp = self.client.get_perp_market_info(market_index).await?;
+        let perp = self.client.get_perp_market_account(market_index).await?;
         let open_interest = (perp.get_open_interest() / BASE_PRECISION) as u64;
         let max_open_interest = (perp.amm.max_open_interest.as_u128() / BASE_PRECISION) as u64;
 
@@ -659,5 +732,18 @@ pub fn create_wallet(
         _ => {
             panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
+    }
+}
+
+/// Wallet extension traits
+trait WalletExt {
+    /// True if the wallet is running in emulation mode (unable to sign txs)
+    fn is_emulating(&self) -> bool;
+}
+
+impl WalletExt for Wallet {
+    /// True if the wallet is running in emulation mode (unable to sign txs)
+    fn is_emulating(&self) -> bool {
+        self.authority() != &self.signer() && !self.is_delegated()
     }
 }
