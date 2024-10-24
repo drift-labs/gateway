@@ -1763,12 +1763,12 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "actix-web",
  "argh",
  "drift-rs",
- "env_logger 0.9.3",
+ "env_logger 0.11.5",
  "futures-util",
  "log",
  "rust_decimal",
@@ -1785,7 +1785,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.2#8bf9630aa8cc7a3749e8c0e9afd41254c418e370"
+source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.3#b297da37e8b85661d5f6157385d81c4253712e3d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1797,8 +1797,8 @@ dependencies = [
 
 [[package]]
 name = "drift-rs"
-version = "1.0.0-alpha.2"
-source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.2#8bf9630aa8cc7a3749e8c0e9afd41254c418e370"
+version = "1.0.0-alpha.3"
+source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.3#b297da37e8b85661d5f6157385d81c4253712e3d"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
