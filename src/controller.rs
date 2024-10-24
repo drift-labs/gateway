@@ -335,34 +335,31 @@ impl AppState {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let user = self.client.get_user_account(&sub_account).await?;
 
-        let oracle_price = self
-            .client
-            .oracle_price(MarketId::perp(market.market_index))
-            .await?;
         let perp_position = user
             .perp_positions
             .iter()
             .find(|p| p.market_index == market.market_index && !p.is_available());
 
         if let Some(perp_position) = perp_position {
-            let result = calculate_liquidation_price_and_unrealized_pnl(
+            let calc = calculate_liquidation_price_and_unrealized_pnl(
                 &self.client,
                 &user,
                 market.market_index,
-            )?;
+            )
+            .await?;
             let unsettled_pnl = Decimal::from_i128_with_scale(
                 perp_position
-                    .get_unrealized_pnl(oracle_price)
+                    .get_unrealized_pnl(calc.oracle_price)
                     .unwrap_or_default(),
                 PRICE_DECIMALS,
             );
 
             let mut p: PerpPosition = (*perp_position).into();
             p.set_extended_info(PerpPositionExtended {
-                liquidation_price: Decimal::new(result.liquidation_price, PRICE_DECIMALS),
-                unrealized_pnl: Decimal::new(result.unrealized_pnl as i64, PRICE_DECIMALS),
+                liquidation_price: Decimal::new(calc.liquidation_price, PRICE_DECIMALS),
+                unrealized_pnl: Decimal::new(calc.unrealized_pnl as i64, PRICE_DECIMALS),
                 unsettled_pnl: unsettled_pnl.normalize(),
-                oracle_price: Decimal::new(oracle_price, PRICE_DECIMALS),
+                oracle_price: Decimal::new(calc.oracle_price, PRICE_DECIMALS),
             });
 
             Ok(p)

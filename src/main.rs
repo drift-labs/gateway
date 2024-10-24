@@ -209,14 +209,17 @@ async fn get_collateral(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
-    let log_level = if config.verbose {
-        log::LevelFilter::Debug
+
+    let mut logger = env_logger::Builder::from_default_env();
+    if config.verbose {
+        logger
+            .filter_module(LOG_TARGET, log::LevelFilter::Debug)
+            .filter_module("rpc", log::LevelFilter::Debug)
     } else {
-        log::LevelFilter::Info
-    };
-    env_logger::Builder::from_default_env()
-        .filter_module(LOG_TARGET, log_level)
-        .init();
+        logger.filter_module(LOG_TARGET, log::LevelFilter::Info)
+    }
+    .init();
+
     let secret_key = std::env::var("DRIFT_GATEWAY_KEY");
     let delegate = config
         .delegate
