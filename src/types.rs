@@ -56,9 +56,10 @@ impl Order {
         Order {
             market_index: value.market_index,
             market_type: value.market_type,
-            price: Decimal::new(value.price as i64, PRICE_DECIMALS),
-            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
-            filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
+            price: Decimal::new(value.price as i64, PRICE_DECIMALS).normalize(),
+            amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals)
+                .normalize(),
+            filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals).normalize(),
             immediate_or_cancel: value.immediate_or_cancel,
             reduce_only: value.reduce_only,
             order_type: value.order_type,
