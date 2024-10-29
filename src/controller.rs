@@ -14,8 +14,10 @@ use drift_rs::{
     },
     priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
     types::{
-        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
-        RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
+        self,
+        accounts::{SpotMarket, User},
+        MarketId, MarketType, ModifyOrderParams, OrderStatus, RpcSendTransactionConfig, SdkError,
+        SdkResult, VersionedMessage,
     },
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
@@ -58,7 +60,7 @@ pub struct AppState {
     pub wallet: Wallet,
     /// true if gateway is using delegated signing
     delegated: bool,
-    pub client: Arc<DriftClient>,
+    pub client: DriftClient,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
@@ -145,7 +147,7 @@ impl AppState {
         };
 
         Self {
-            client: Arc::new(client),
+            client,
             delegated: wallet.is_delegated(),
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
@@ -333,7 +335,7 @@ impl AppState {
         market: Market,
     ) -> GatewayResult<PerpPosition> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
-        let user = self.client.get_user_account(&sub_account).await?;
+        let user: User = self.client.try_get_account(&sub_account)?;
 
         let perp_position = user
             .perp_positions
@@ -388,8 +390,7 @@ impl AppState {
                 .into_iter()
                 .filter(|o| {
                     if let Some(GetOrdersRequest { ref market }) = req {
-                        o.market_index == market.market_index
-                            && o.market_type == market.market_type.into()
+                        o.market_index == market.market_index && o.market_type == market.market_type
                     } else {
                         true
                     }
@@ -397,7 +398,7 @@ impl AppState {
                 .map(|o| {
                     let base_decimals = get_market_decimals(
                         self.client.program_data(),
-                        Market::new(o.market_index, o.market_type.into()),
+                        Market::new(o.market_index, o.market_type),
                     );
                     Order::from_sdk_order(o, base_decimals)
                 })
@@ -614,14 +615,16 @@ impl AppState {
             })?;
 
         // double send the tx to help chances of landing
-        let client = Arc::clone(&self.client);
-        tokio::spawn(async move {
-            if let Err(err) = client
-                .inner()
-                .send_transaction_with_config(&tx, tx_config)
-                .await
-            {
-                warn!(target: LOG_TARGET, "retry tx failed: {err:?}");
+        tokio::spawn({
+            let client = self.client.clone();
+            async move {
+                if let Err(err) = client
+                    .inner()
+                    .send_transaction_with_config(&tx, tx_config)
+                    .await
+                {
+                    warn!(target: LOG_TARGET, "retry tx failed: {err:?}");
+                }
             }
         });
 

@@ -55,7 +55,7 @@ impl Order {
 
         Order {
             market_index: value.market_index,
-            market_type: value.market_type.into(),
+            market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_DECIMALS),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
             filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
@@ -277,8 +277,8 @@ pub fn de_market_type<'de, D>(deserializer: D) -> Result<MarketType, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    match s.as_str() {
+    let s = Deserialize::deserialize(deserializer)?;
+    match s {
         "perp" => Ok(MarketType::Perp),
         "spot" => Ok(MarketType::Spot),
         _ => Err(serde::de::Error::custom(format!(
@@ -312,7 +312,7 @@ impl PlaceOrder {
 
         OrderParams {
             market_index: self.market.market_index,
-            market_type: self.market.market_type.into(),
+            market_type: self.market.market_type,
             order_type: self.order_type,
             base_asset_amount: base_amount,
             direction: if self.amount.is_sign_negative() {
@@ -652,7 +652,7 @@ mod tests {
             base_asset_amount: 1 * BASE_PRECISION as u64,
             price: 0,
             market_index: 0,
-            market_type: MarketType::Perp.into(),
+            market_type: MarketType::Perp,
             oracle_price_offset: -500_000,
             ..Default::default()
         };
@@ -673,7 +673,7 @@ mod tests {
             let o = drift_rs::types::Order {
                 base_asset_amount: input,
                 price: input,
-                market_type: MarketType::Perp.into(),
+                market_type: MarketType::Perp,
                 ..Default::default()
             };
             let gateway_order = Order::from_sdk_order(o, base_decimals);

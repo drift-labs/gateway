@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, str::FromStr, sync::Arc, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 use actix_web::{
     delete, get,
@@ -156,9 +156,15 @@ async fn get_positions_extended(
 ) -> impl Responder {
     let index = path.into_inner();
     handle_result(
-        controller
-            .get_position_extended(ctx.0, Market::perp(index))
-            .await,
+        // there's lots of awaiting on this path
+        // keep it on same thread
+        tokio::task::spawn_local(async move {
+            controller
+                .get_position_extended(ctx.0, Market::perp(index))
+                .await
+        })
+        .await
+        .expect("joined"),
     )
 }
 
@@ -233,7 +239,7 @@ async fn main() -> std::io::Result<()> {
     let tx_commitment = CommitmentConfig::from_str(&config.tx_commitment)
         .expect("one of: processed | confirmed | finalized");
 
-    let state = AppState::new(
+    let app_state = AppState::new(
         &config.rpc_host,
         config.dev,
         wallet,
@@ -246,9 +252,9 @@ async fn main() -> std::io::Result<()> {
     // start market+oracle subs
     let mut markets = Vec::<MarketId>::default();
     if let Some(ref user_markets) = config.markets {
-        markets.extend(parse_markets(&state.client, user_markets).expect("valid markets"));
+        markets.extend(parse_markets(&app_state.client, user_markets).expect("valid markets"));
     };
-    state.subscribe_market_data(&markets).await;
+    app_state.subscribe_market_data(&markets).await;
     info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
 
     info!(
@@ -260,27 +266,27 @@ async fn main() -> std::io::Result<()> {
         info!(
             target: LOG_TARGET,
             "🪪 authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
-            state.authority(),
-            state.default_sub_account(),
-            state.signer(),
+            app_state.authority(),
+            app_state.default_sub_account(),
+            app_state.signer(),
         );
     } else {
         info!(
             target: LOG_TARGET,
             "🪪 authority: {:?}, default sub-account: {:?}",
-            state.authority(),
-            state.default_sub_account()
+            app_state.authority(),
+            app_state.default_sub_account()
         );
         if emulate.is_some() {
             warn!("using emulation mode, tx signing unavailable");
         }
     }
 
-    let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
+    let client = Box::leak(Box::new(app_state.client.clone()));
     websocket::start_ws_server(
         format!("{}:{}", &config.host, config.ws_port).as_str(),
         config.rpc_host.replace("http", "ws"),
-        state.wallet.clone(),
+        app_state.wallet.clone(),
         client.program_data(),
     )
     .await;
@@ -288,7 +294,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::new("%a | %s | %r | (%Dms)").log_target(LOG_TARGET))
-            .app_data(web::Data::new(state.clone()))
+            .app_data(web::Data::new(app_state.clone()))
             .service(
                 web::scope("/v2")
                     .service(get_markets)
