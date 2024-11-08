@@ -240,6 +240,7 @@ async fn main() -> std::io::Result<()> {
         Some((state_commitment, tx_commitment)),
         Some(config.default_sub_account_id),
         config.skip_tx_preflight,
+        config.extra_rpc.split(",").into_iter().collect(),
     )
     .await;
 
@@ -412,6 +413,9 @@ struct GatewayConfig {
     /// enable debug logging
     #[argh(switch)]
     verbose: bool,
+    /// extra solana RPC urls
+    #[argh(option)]
+    extra_rpc: String,
 }
 
 /// Parse raw markets list from user command

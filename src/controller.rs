@@ -1,4 +1,10 @@
-use std::{borrow::Cow, collections::HashSet, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use drift_rs::{
     constants::ProgramData,
@@ -17,6 +23,7 @@ use drift_rs::{
         self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
         RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
     },
+    utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
 use futures_util::{stream::FuturesUnordered, StreamExt};
@@ -66,6 +73,8 @@ pub struct AppState {
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
     priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
+    /// list of additional RPC endpoints for tx broadcast
+    extra_rpcs: Vec<Arc<RpcClient>>,
 }
 
 impl AppState {
@@ -93,6 +102,7 @@ impl AppState {
     /// * `commitment` - Slot finalisation/commitement levels
     /// * `default_subaccount_id` - by default all queries will use this subaccount
     /// * `skip_tx_preflight` - submit txs without checking preflight results
+    /// * `extra_rpcs` - list of additional RPC endpoints for tx submission
     pub async fn new(
         endpoint: &str,
         devnet: bool,
@@ -100,6 +110,7 @@ impl AppState {
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
         default_subaccount_id: Option<u16>,
         skip_tx_preflight: bool,
+        extra_rpcs: Vec<&str>,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -152,6 +163,10 @@ impl AppState {
             skip_tx_preflight,
             priority_fee_subscriber,
             wallet,
+            extra_rpcs: extra_rpcs
+                .into_iter()
+                .map(|u| Arc::new(RpcClient::new(get_http_url(u).expect("valid RPC url"))))
+                .collect(),
         }
     }
 
@@ -232,7 +247,7 @@ impl AppState {
         )
         .with_priority_fee(priority_fee, ctx.cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
-        self.send_tx(tx, "cancel_orders").await
+        self.send_tx(tx, "cancel_orders", None).await
     }
 
     /// Return position for market if given, otherwise return all positions
@@ -461,7 +476,7 @@ impl AppState {
             .place_orders(orders)
             .build();
 
-        self.send_tx(tx, "cancel_and_place").await
+        self.send_tx(tx, "cancel_and_place", None).await
     }
 
     pub async fn place_orders(
@@ -493,7 +508,7 @@ impl AppState {
         .place_orders(orders)
         .build();
 
-        self.send_tx(tx, "place_orders").await
+        self.send_tx(tx, "place_orders", None).await
     }
 
     pub async fn modify_orders(
@@ -512,7 +527,7 @@ impl AppState {
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
-        self.send_tx(tx, "modify_orders").await
+        self.send_tx(tx, "modify_orders", None).await
     }
 
     pub async fn get_tx_events_for_subaccount_id(
@@ -589,6 +604,7 @@ impl AppState {
         &self,
         tx: VersionedMessage,
         reason: &'static str,
+        ttl: Option<u64>,
     ) -> GatewayResult<TxResponse> {
         let recent_block_hash = self.client.get_latest_blockhash().await?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
@@ -598,14 +614,16 @@ impl AppState {
             skip_preflight: self.skip_tx_preflight,
             ..Default::default()
         };
-        let result = self
+
+        // submit to primary RPC first,
+        let sig = self
             .client
             .inner()
             .send_transaction_with_config(&tx, tx_config)
             .await
             .map(|s| {
                 debug!(target: LOG_TARGET, "sent tx ({reason}): {s}");
-                TxResponse::new(s.to_string())
+                s
             })
             .map_err(|err| {
                 warn!(target: LOG_TARGET, "sending tx ({reason}) failed: {err:?}");
@@ -613,19 +631,61 @@ impl AppState {
                 handle_tx_err(err.into())
             })?;
 
-        // double send the tx to help chances of landing
-        let client = Arc::clone(&self.client);
+        // start a dedicated tx sending task
+        // - tx is broadcast to all available RPCs
+        // - retried at set intervals
+        // - retried upto some given deadline
+        // client should poll for the tx to confirm success
+        let primary_rpc = Arc::clone(&self.client);
+        let tx_signature = sig.clone();
+        let extra_rpcs = self.extra_rpcs.clone();
         tokio::spawn(async move {
-            if let Err(err) = client
-                .inner()
-                .send_transaction_with_config(&tx, tx_config)
-                .await
+            let start = SystemTime::now();
+            let ttl = Duration::from_secs(ttl.unwrap_or(16));
+            let mut confirmed = false;
+            while SystemTime::now()
+                .duration_since(start)
+                .is_ok_and(|x| x < ttl)
             {
-                warn!(target: LOG_TARGET, "retry tx failed: {err:?}");
+                let mut futs = FuturesUnordered::new();
+                for rpc in extra_rpcs.iter() {
+                    futs.push(rpc.send_transaction_with_config(&tx, tx_config));
+                }
+                futs.push(
+                    primary_rpc
+                        .inner()
+                        .send_transaction_with_config(&tx, tx_config),
+                );
+
+                while let Some(res) = futs.next().await {
+                    match res {
+                        Ok(sig) => {
+                            debug!(target: LOG_TARGET, "sent tx ({reason}): {sig}");
+                        }
+                        Err(err) => {
+                            warn!(target: LOG_TARGET, "sending tx ({reason}) failed: {err:?}");
+                        }
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(400)).await;
+
+                if let Ok(Some(Ok(()))) = primary_rpc
+                    .inner()
+                    .get_signature_status(&tx_signature)
+                    .await
+                {
+                    confirmed = true;
+                    info!(target: LOG_TARGET, "tx confirmed onchain: {tx_signature:?}");
+                    break;
+                }
+            }
+            if !confirmed {
+                warn!(target: LOG_TARGET, "tx was not confirmed: {tx_signature:?}");
             }
         });
 
-        Ok(result)
+        Ok(TxResponse::new(sig.to_string()))
     }
 }
 
