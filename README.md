@@ -11,6 +11,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
     - [Delegated Signing Mode](#delegated-signing-mode)
     - [Sub-account Switching](#sub-account-switching)
     - [Emulation Mode](#emulation-mode)
+    - [Transaction Confirmation](#transaction-confirmtaion-and-ttl)
     - [CU price/limits](#cu-price--limits)
 3. [API Examples](#api-examples)
     - [HTTP API](#http-api)
@@ -49,7 +50,9 @@ docker run \
   -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
   -p 8080:8080 \
   --platform linux/x86_64 \
-  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0 --markets wbtc,drift
+  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0 \
+  --markets wbtc,drift
+  --extra-rpcs https://api.mainnet-beta.solana.com
 ```
 
 Build the Docker image:
@@ -145,6 +148,7 @@ Options:
                     default sub_account_id to use (default: 0)
   --skip-tx-preflight
                     skip tx preflight checks
+  --extra-rpc       extra solana RPC urls for improved Tx broadcast
   --verbose         enable debug logging
   --help            display usage information
 ```
@@ -168,7 +172,7 @@ e.g `http://<gateway>/v1/orders?subAccountId=3` will return orders for the walle
 
 ## Emulation Mode
 
-Passing the `--emulate <EMULATED_PUBBKEY>` flag will instruct the gateway to run in read-only mode.
+Passing the `--emulate <EMULATED_PUBKEY>` flag will instruct the gateway to run in read-only mode.
 
 The gateway will receive all events, positions, etc. as normal but be unable to send transactions.
 
@@ -190,6 +194,34 @@ The following error is logged when a tx does not have enough CU limit, increasin
 
 ```bash
 $ curl 'localhost:8080/v2/orders?computeUnitLimit=300000&computeUnitPrice=1000' -X POST \
+-H 'content-type: application/json' \
+-d # { order data ...}
+```
+
+## Transaction Confirmation and TTLs
+
+Gateway endpoints that place network transactions will return the signature as a base64 string.  
+User's can poll `transactionEvent` to confirm success by signature or watch Ws events for e.g. confirmation by order Ids instead.  
+
+Gateway will resubmit txs until they are either confirmed by the network or timeout.  
+This allows gateway txs to have a higher chance of confirmation during busy network periods.  
+setting `?ttl=<TIMEOUT_IN_SECS>` on a request determines how long gateway will resubmit txs for, (default: 4s/~10 slots). 
+e.g. `ttl?=2` means that the tx will be rebroadcast over the next 5 slots (5 * 400ms).  
+
+⚠️ users should take care to set either `max_order` ts or use atomic place/cancel/modify requests to prevent
+double orders or orders being accepted later than intended.  
+
+improving tx confirmation rates will require trial and error, try adjusting tx TTL and following parameters until
+results are meet requirements:
+- set `--extra-rpcs=<RPC_1>,<RPC_2>` to broadcast tx to multiple nodes
+- set `--skip-tx-preflight` to disable preflight RPC checks
+- setting a longer `ttl` per request
+- set statically higher CU prices per request (see previous section) when no ack rates increase
+
+**example request**
+
+```bash
+$ curl 'localhost:8080/v2/orders?ttl=2' -X POST \
 -H 'content-type: application/json' \
 -d # { order data ...}
 ```
@@ -819,7 +851,7 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
 
 #### `429`s / gateway hitting RPC rate limits
 
-this can occur during gateway startup as drift market data is pulled from the network and subscriptions are intialized.  
+this can occur during gateway startup as drift market data is pulled from the network and subscriptions are initialized.  
 try setting `INIT_RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.  
 
 The free \_api.mainnet-beta.solana.com_ RPC support is limited due to rate-limits
