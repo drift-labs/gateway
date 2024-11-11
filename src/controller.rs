@@ -46,6 +46,11 @@ use crate::{
     Context, LOG_TARGET,
 };
 
+/// Default TTL in seconds of gateway tx retry
+/// afterwhich gateway will no longer resubmit or monitor the tx
+// ~10 slots
+const DEFAULT_TX_TTL: u16 = 4;
+
 pub type GatewayResult<T> = Result<T, ControllerError>;
 
 #[derive(Error, Debug)]
@@ -247,7 +252,7 @@ impl AppState {
         )
         .with_priority_fee(priority_fee, ctx.cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
-        self.send_tx(tx, "cancel_orders", None).await
+        self.send_tx(tx, "cancel_orders", ctx.ttl).await
     }
 
     /// Return position for market if given, otherwise return all positions
@@ -476,7 +481,7 @@ impl AppState {
             .place_orders(orders)
             .build();
 
-        self.send_tx(tx, "cancel_and_place", None).await
+        self.send_tx(tx, "cancel_and_place", ctx.ttl).await
     }
 
     pub async fn place_orders(
@@ -508,7 +513,7 @@ impl AppState {
         .place_orders(orders)
         .build();
 
-        self.send_tx(tx, "place_orders", None).await
+        self.send_tx(tx, "place_orders", ctx.ttl).await
     }
 
     pub async fn modify_orders(
@@ -527,7 +532,7 @@ impl AppState {
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
-        self.send_tx(tx, "modify_orders", None).await
+        self.send_tx(tx, "modify_orders", ctx.ttl).await
     }
 
     pub async fn get_tx_events_for_subaccount_id(
@@ -604,7 +609,7 @@ impl AppState {
         &self,
         tx: VersionedMessage,
         reason: &'static str,
-        ttl: Option<u64>,
+        ttl: Option<u16>,
     ) -> GatewayResult<TxResponse> {
         let recent_block_hash = self.client.get_latest_blockhash().await?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
@@ -621,9 +626,8 @@ impl AppState {
             .inner()
             .send_transaction_with_config(&tx, tx_config)
             .await
-            .map(|s| {
+            .inspect(|s| {
                 debug!(target: LOG_TARGET, "sent tx ({reason}): {s}");
-                s
             })
             .map_err(|err| {
                 warn!(target: LOG_TARGET, "sending tx ({reason}) failed: {err:?}");
@@ -637,11 +641,11 @@ impl AppState {
         // - retried upto some given deadline
         // client should poll for the tx to confirm success
         let primary_rpc = Arc::clone(&self.client);
-        let tx_signature = sig.clone();
+        let tx_signature = sig;
         let extra_rpcs = self.extra_rpcs.clone();
         tokio::spawn(async move {
             let start = SystemTime::now();
-            let ttl = Duration::from_secs(ttl.unwrap_or(16));
+            let ttl = Duration::from_secs(ttl.unwrap_or(DEFAULT_TX_TTL) as u64);
             let mut confirmed = false;
             while SystemTime::now()
                 .duration_since(start)

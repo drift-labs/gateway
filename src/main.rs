@@ -37,6 +37,9 @@ struct Context {
     pub cu_limit: Option<u32>,
     #[serde(default, rename = "computeUnitPrice")]
     pub cu_price: Option<u64>,
+    /// Tx retry TTL
+    #[serde(default, rename = "ttl")]
+    pub ttl: Option<u16>,
 }
 
 #[get("/markets")]
@@ -240,7 +243,7 @@ async fn main() -> std::io::Result<()> {
         Some((state_commitment, tx_commitment)),
         Some(config.default_sub_account_id),
         config.skip_tx_preflight,
-        config.extra_rpc.split(",").into_iter().collect(),
+        config.extra_rpc.split(",").collect(),
     )
     .await;
 
@@ -410,12 +413,12 @@ struct GatewayConfig {
     /// skip tx preflight checks
     #[argh(switch)]
     skip_tx_preflight: bool,
+    /// extra solana RPC urls for improved Tx broadcast
+    #[argh(option)]
+    extra_rpc: String,
     /// enable debug logging
     #[argh(switch)]
     verbose: bool,
-    /// extra solana RPC urls
-    #[argh(option)]
-    extra_rpc: String,
 }
 
 /// Parse raw markets list from user command
@@ -455,7 +458,7 @@ mod tests {
         };
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        AppState::new(&rpc_endpoint, true, wallet, None, None, false).await
+        AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await
     }
 
     // likely safe to ignore during development, mainy regression tests for CI
@@ -476,7 +479,7 @@ mod tests {
 
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, true, wallet, None, None, false).await;
+        let state = AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await;
 
         let app = test::init_service(
             App::new()
