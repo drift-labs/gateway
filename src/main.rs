@@ -243,7 +243,7 @@ async fn main() -> std::io::Result<()> {
         Some((state_commitment, tx_commitment)),
         Some(config.default_sub_account_id),
         config.skip_tx_preflight,
-        config.extra_rpc.split(",").collect(),
+        config.extra_rpcs.split(",").collect(),
     )
     .await;
 
@@ -415,7 +415,7 @@ struct GatewayConfig {
     skip_tx_preflight: bool,
     /// extra solana RPC urls for improved Tx broadcast
     #[argh(option)]
-    extra_rpc: String,
+    extra_rpcs: String,
     /// enable debug logging
     #[argh(switch)]
     verbose: bool,

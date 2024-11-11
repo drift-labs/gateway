@@ -215,6 +215,7 @@ improving tx confirmation rates will require trial and error, try adjusting tx T
 results are meet requirements:
 - set `--extra-rpcs=<RPC_1>,<RPC_2>` to broadcast tx to multiple nodes
 - set `--skip-tx-preflight` to disable preflight RPC checks
+- setting a longer `ttl` per request
 - set statically higher CU prices per request (see previous section) when no ack rates increase
 
 **example request**
