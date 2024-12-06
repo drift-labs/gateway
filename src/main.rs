@@ -235,7 +235,7 @@ async fn main() -> std::io::Result<()> {
         .expect("one of: processed | confirmed | finalized");
     let tx_commitment = CommitmentConfig::from_str(&config.tx_commitment)
         .expect("one of: processed | confirmed | finalized");
-
+    let extra_rpcs = config.extra_rpcs.as_ref();
     let state = AppState::new(
         &config.rpc_host,
         config.dev,
@@ -243,7 +243,9 @@ async fn main() -> std::io::Result<()> {
         Some((state_commitment, tx_commitment)),
         Some(config.default_sub_account_id),
         config.skip_tx_preflight,
-        config.extra_rpcs.unwrap_or_default().split(",").collect(),
+        extra_rpcs
+            .map(|s| s.split(",").collect())
+            .unwrap_or_default(),
     )
     .await;
 
