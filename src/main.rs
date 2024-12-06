@@ -286,7 +286,7 @@ async fn main() -> std::io::Result<()> {
     websocket::start_ws_server(
         format!("{}:{}", &config.host, config.ws_port).as_str(),
         config.rpc_host.replace("http", "ws"),
-        state.wallet.clone(),
+        state.wallet.inner().clone(),
         client.program_data(),
     )
     .await;
