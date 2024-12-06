@@ -14,6 +14,7 @@ use drift_rs::{
         MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
         PostOnlyParam,
     },
+    Wallet,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -568,6 +569,36 @@ impl From<CollateralInfo> for UserCollateralResponse {
             total: Decimal::from_i128_with_scale(value.total, QUOTE_DECIMALS).normalize(),
             free: Decimal::from_i128_with_scale(value.free, QUOTE_DECIMALS).normalize(),
         }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum WalletMode {
+    Normal,
+    Delegated,
+    Emulated,
+}
+
+/// Wallet extension
+pub struct GatewayWallet {
+    wallet: Wallet,
+    mode: WalletMode,
+}
+
+impl GatewayWallet {
+    pub fn new(wallet: Wallet, mode: WalletMode) -> Self {
+        Self { wallet, mode }
+    }
+    pub fn inner(&self) -> &Wallet {
+        &self.wallet
+    }
+    /// True if the wallet is using delegated signing
+    pub fn is_delegated(&self) -> bool {
+        self.mode == WalletMode::Delegated
+    }
+    /// True if the wallet is running in emulation mode (unable to sign txs)
+    pub fn is_emulating(&self) -> bool {
+        self.mode == WalletMode::Emulated
     }
 }
 
