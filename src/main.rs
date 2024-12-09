@@ -636,7 +636,8 @@ mod tests {
                         "txIdx": 6
                     }
                 }
-            ]
+            ],
+            "success": true,
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }
@@ -664,13 +665,14 @@ mod tests {
         let body_bytes = test::read_body(resp).await;
         let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let expect_body = json!({
-            "events": []
+            "events": [],
+            "success": true
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }
 
     #[actix_web::test]
-    async fn get_tx_events_doesnt_exit() {
+    async fn get_tx_events_doesnt_exist() {
         let controller = setup_controller(Some(
             Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
         ))

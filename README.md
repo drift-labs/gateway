@@ -475,6 +475,14 @@ the provided user will be returned.
 $ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5?subAccountId=0
 ```
 
+A successful tx must bed confirm onchain and also execute successfully, the following table shows the possible responses from this endpoint:
+
+|                   | execute ok                             | execute fail          |
+|-------------------|------------------------------------------|-------------------------|
+| confirm ok   | `200, {"success": true, "events": [...] }` | `200, { "success": false, "error": "msg" }` |
+| confirm fail | `404`                                      | `404`
+
+
 **Response**
 
 A response with a fill belonging to sub-account 0
@@ -496,7 +504,8 @@ A response with a fill belonging to sub-account 0
         "signature": "5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkwRkdAJ1REnsJPK82q7C3vcMC4BhCQiABR4wfdbaa9StMDkCd9y5"
       }
     }
-  ]
+  ],
+  "success":true
 }
 ```
 
@@ -513,9 +522,21 @@ A response for a transaction that was found, but doesn't contain any events for 
 
 ```json
 {
-  "events": []
+  "events": [],
+  "success":true
 }
 ```
+
+A response for a transaction that was confirmed onchain but failed execution e.g. due to exceeding slippage
+
+```json
+{
+  "events": [],
+  "error": "program error: 6015",
+  "success": false
+}
+```
+full list of error codes [here](https://drift-labs.github.io/v2-teacher/#errors)
 
 ### Get SOL balance
 Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
