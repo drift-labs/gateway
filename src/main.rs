@@ -636,7 +636,8 @@ mod tests {
                         "txIdx": 6
                     }
                 }
-            ]
+            ],
+            "success": true,
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }

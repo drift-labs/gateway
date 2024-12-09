@@ -58,4 +58,4 @@ jobs:
         run: |
           cargo -V
           cp libdrift_ffi_sys.so ./target/debug/deps
-          cargo test --all -- --test-threads=3
+          cargo test --all -- --test-threads=2
