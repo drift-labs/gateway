@@ -664,7 +664,8 @@ mod tests {
         let body_bytes = test::read_body(resp).await;
         let events: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let expect_body = json!({
-            "events": []
+            "events": [],
+            "success": true
         });
         assert_eq!(events, expect_body, "incorrect resp body");
     }

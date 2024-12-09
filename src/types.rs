@@ -495,6 +495,7 @@ impl TxResponse {
 pub struct TxEventsResponse {
     events: Vec<AccountEvent>,
     success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
