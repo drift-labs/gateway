@@ -410,7 +410,7 @@ impl OrderWithDecimals {
             order_id: value.order_id,
             market_index: value.market_index,
             order_type: value.order_type,
-            market_type: value.market_type.into(),
+            market_type: value.market_type,
             user_order_id: value.user_order_id,
             direction: value.direction,
             reduce_only: value.reduce_only,
@@ -502,10 +502,8 @@ pub(crate) fn map_drift_event_for_account(
             tx_idx,
             ts,
         } => {
-            let decimals = get_market_decimals(
-                program_data,
-                Market::new(*market_index, (*market_type).into()),
-            );
+            let decimals =
+                get_market_decimals(program_data, Market::new(*market_index, *market_type));
             let fill = if *maker == Some(sub_account_address) {
                 Some(AccountEvent::fill(
                     maker_side.unwrap(),
@@ -519,7 +517,7 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *tx_idx,
                     *market_index,
-                    (*market_type).into(),
+                    *market_type,
                     (*maker).map(|x| x.to_string()),
                     Some(*maker_order_id),
                     Some(*maker_fee),
@@ -540,7 +538,7 @@ pub(crate) fn map_drift_event_for_account(
                     signature,
                     *tx_idx,
                     *market_index,
-                    (*market_type).into(),
+                    *market_type,
                     (*maker).map(|x| x.to_string()),
                     Some(*maker_order_id),
                     Some(*maker_fee),
@@ -614,7 +612,7 @@ pub(crate) fn map_drift_event_for_account(
         } => {
             let decimals = get_market_decimals(
                 program_data,
-                Market::new(order.market_index, order.market_type.into()),
+                Market::new(order.market_index, order.market_type),
             );
             (
                 Channel::Orders,

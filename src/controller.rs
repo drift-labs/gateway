@@ -409,8 +409,7 @@ impl AppState {
                 .into_iter()
                 .filter(|o| {
                     if let Some(GetOrdersRequest { ref market }) = req {
-                        o.market_index == market.market_index
-                            && o.market_type == market.market_type.into()
+                        o.market_index == market.market_index && o.market_type == market.market_type
                     } else {
                         true
                     }
@@ -418,7 +417,7 @@ impl AppState {
                 .map(|o| {
                     let base_decimals = get_market_decimals(
                         self.client.program_data(),
-                        Market::new(o.market_index, o.market_type.into()),
+                        Market::new(o.market_index, o.market_type),
                     );
                     Order::from_sdk_order(o, base_decimals)
                 })
@@ -586,17 +585,36 @@ impl AppState {
                         OptionSerializer::None | OptionSerializer::Skip => {}
                     }
                 }
-                Ok(TxEventsResponse::new(events))
+                Ok(TxEventsResponse::new(events, true, None))
             }
             Err(err) => {
-                let tx_error = err.get_transaction_error();
-                warn!(target: LOG_TARGET, "failed to get transaction: {err:?}, tx_error: {tx_error:?}");
-                if matches!(err.kind(), ClientErrorKind::SerdeJson(_)) {
-                    Err(ControllerError::TxNotFound {
+                warn!(target: LOG_TARGET, "failed to get transaction: {err:?}, tx_error: {err:?}");
+                match err.kind() {
+                    ClientErrorKind::SerdeJson(_) => Err(ControllerError::TxNotFound {
                         tx_sig: tx_sig.to_string(),
-                    })
-                } else {
-                    Ok(TxEventsResponse::default())
+                    }),
+                    _ => {
+                        let err: SdkError = err.into();
+                        if let Some(code) = err.to_anchor_error_code() {
+                            return Ok(TxEventsResponse::new(
+                                Default::default(),
+                                false,
+                                Some(format!("program error: {code}")),
+                            ));
+                        }
+                        if err.to_out_of_sol_error().is_some() {
+                            return Ok(TxEventsResponse::new(
+                                Default::default(),
+                                false,
+                                Some("ouf of sol, top-up account".into()),
+                            ));
+                        }
+                        Ok(TxEventsResponse::new(
+                            Default::default(),
+                            false,
+                            Some(err.to_string()),
+                        ))
+                    }
                 }
             }
         }

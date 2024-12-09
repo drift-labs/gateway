@@ -56,7 +56,7 @@ impl Order {
 
         Order {
             market_index: value.market_index,
-            market_type: value.market_type.into(),
+            market_type: value.market_type,
             price: Decimal::new(value.price as i64, PRICE_DECIMALS),
             amount: Decimal::new(value.base_asset_amount as i64 * to_sign, base_decimals),
             filled: Decimal::new(value.base_asset_amount_filled as i64, base_decimals),
@@ -313,7 +313,7 @@ impl PlaceOrder {
 
         OrderParams {
             market_index: self.market.market_index,
-            market_type: self.market.market_type.into(),
+            market_type: self.market.market_type,
             order_type: self.order_type,
             base_asset_amount: base_amount,
             direction: if self.amount.is_sign_negative() {
@@ -494,11 +494,17 @@ impl TxResponse {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct TxEventsResponse {
     events: Vec<AccountEvent>,
+    success: bool,
+    error: Option<String>,
 }
 
 impl TxEventsResponse {
-    pub fn new(events: Vec<AccountEvent>) -> Self {
-        Self { events }
+    pub fn new(events: Vec<AccountEvent>, success: bool, error: Option<String>) -> Self {
+        Self {
+            events,
+            success,
+            error,
+        }
     }
 }
 

@@ -670,7 +670,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn get_tx_events_doesnt_exit() {
+    async fn get_tx_events_doesnt_exist() {
         let controller = setup_controller(Some(
             Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
         ))
