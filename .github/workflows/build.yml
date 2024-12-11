@@ -21,22 +21,22 @@ on:
 jobs:
   format-build-test:
     runs-on: ubicloud
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Config rust toolchain
         run: |
           rustup update stable && rustup default stable
-          rustup component add rustfmt
           rustup show active-toolchain
-          rustup install 1.76.0-x86_64-unknown-linux-gnu
       - name: Format
         run: cargo fmt --all -- --check
       - name: install libdrift_ffi_sys
         run: |
-          curl -L https://github.com/user-attachments/files/17849111/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
-          sudo cp libdrift_ffi_sys.so /usr/lib/
+          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.103.0/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
+          sudo cp libdrift_ffi_sys.so /lib/
       - uses: ubicloud/rust-cache@v2
         with:
           path: |
