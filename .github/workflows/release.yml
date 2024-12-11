@@ -2,8 +2,9 @@ name: Release
 
 on:
   push:
-    branches:
-      - "master"
+    tags:
+      - 'v*.*.*'
+ 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -18,13 +19,23 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Build image
         run: |
-          VERSION_TAG=$(grep -Po -m1 '\d.\d.\d' Cargo.toml)
+          CARGO_VERSION=$(grep -Po '(?<=version = ")\d+\.\d+\.\d+' Cargo.toml)
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch: Cargo.toml version ($CARGO_VERSION) doesn't match tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version $CARGO_VERSION matches tag"
+
           docker build -f Dockerfile .\
             -t "${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA::6}"\
-            -t "${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"\
+            -t "${REGISTRY}/${IMAGE_NAME}:${TAG_VERSION}"\
             -t "${REGISTRY}/${IMAGE_NAME}:latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
