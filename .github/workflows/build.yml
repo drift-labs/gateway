@@ -33,10 +33,6 @@ jobs:
           rustup show active-toolchain
       - name: Format
         run: cargo fmt --all -- --check
-      - name: install libdrift_ffi_sys
-        run: |
-          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.103.0/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
-          sudo cp libdrift_ffi_sys.so /lib/
       - uses: ubicloud/rust-cache@v2
         with:
           path: |
@@ -45,15 +41,22 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: install libdrift_ffi_sys
+        run: |
+          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.105.0/libdrift_ffi_sys.so -o libdrift_ffi_sys.so
+          sudo cp libdrift_ffi_sys.so /usr/lib/
       - name: Build
         run: |
           cargo -V
           cargo check
+        env:
+          CARGO_DRIFT_FFI_PATH: /usr/lib
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
           TEST_DELEGATED_SIGNER: ${{ secrets.TEST_DELEGATED_SIGNER }}
           TEST_RPC_ENDPOINT: ${{ secrets.DEVNET_RPC_ENDPOINT }}
+          CARGO_DRIFT_FFI_PATH: /usr/lib
         # --test-threads, limit parallelism to prevent hitting RPC rate-limits
         run: |
           cargo -V

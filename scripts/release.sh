@@ -1,5 +1,7 @@
 #!/bin/bash
+echo
 echo "Preparing gateway release.."
+echo
 
 # Check if working directory is clean
 if [ -n "$(git status --porcelain)" ]; then
@@ -26,4 +28,6 @@ fi
 git tag "v$CARGO_VERSION"
 git push origin "v$CARGO_VERSION"
 
+echo 
 echo "Release tag v$CARGO_VERSION pushed. GitHub Actions will handle the release."
+echo
