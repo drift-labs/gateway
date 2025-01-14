@@ -49,6 +49,8 @@ jobs:
         run: |
           cargo -V
           cargo check
+        env:
+          CARGO_DRIFT_FFI_PATH: /usr/lib
       - name: Test
         env:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
