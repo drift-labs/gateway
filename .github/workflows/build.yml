@@ -33,10 +33,6 @@ jobs:
           rustup show active-toolchain
       - name: Format
         run: cargo fmt --all -- --check
-      - name: install libdrift_ffi_sys
-        run: |
-          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.103.0/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
-          sudo cp libdrift_ffi_sys.so /lib/
       - uses: ubicloud/rust-cache@v2
         with:
           path: |
@@ -45,6 +41,10 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: install libdrift_ffi_sys
+        run: |
+          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.103.0/libdrift_ffi_sys.so.zip > ffi.zip && unzip ffi.zip
+          sudo cp libdrift_ffi_sys.so /usr/lib/
       - name: Build
         run: |
           cargo -V

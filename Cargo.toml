@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 actix-web = "*"
 argh = "*"
-drift-rs = { git = "https://github.com/drift-labs/drift-rs", tag = "v1.0.0-alpha.5" }
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "b8ed3e458284469dcdd2218b7e5e909dc402f2d6" }
 env_logger = "*"
 futures-util = "*"
 log = "*"
