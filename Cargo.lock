@@ -1764,7 +1764,7 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.2.4"
+version = "1.2.5"
 dependencies = [
  "actix-web",
  "argh",
@@ -1786,7 +1786,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.2"
-source = "git+https://github.com/drift-labs/drift-rs?rev=b8ed3e458284469dcdd2218b7e5e909dc402f2d6#b8ed3e458284469dcdd2218b7e5e909dc402f2d6"
+source = "git+https://github.com/drift-labs/drift-rs?rev=9e06e1b#9e06e1b060de86d0b2c80531858bc14f1c8877c6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1799,7 +1799,7 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0-alpha.5"
-source = "git+https://github.com/drift-labs/drift-rs?rev=b8ed3e458284469dcdd2218b7e5e909dc402f2d6#b8ed3e458284469dcdd2218b7e5e909dc402f2d6"
+source = "git+https://github.com/drift-labs/drift-rs?rev=9e06e1b#9e06e1b060de86d0b2c80531858bc14f1c8877c6"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
