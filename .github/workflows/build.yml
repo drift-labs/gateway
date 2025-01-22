@@ -43,7 +43,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: install libdrift_ffi_sys
         run: |
-          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.105.0/libdrift_ffi_sys.so -o libdrift_ffi_sys.so
+          curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.107.0/libdrift_ffi_sys.so -o libdrift_ffi_sys.so
           sudo cp libdrift_ffi_sys.so /usr/lib/
       - name: Build
         run: |
