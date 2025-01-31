@@ -1786,7 +1786,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.1.3"
-source = "git+https://github.com/drift-labs/drift-rs?rev=0824fc2#0824fc279132f62ae7f0de343da6286a4358e410"
+source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.7#1908476e1db7566fc8c0f3978e7e0cfe262fa7af"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1798,8 +1798,8 @@ dependencies = [
 
 [[package]]
 name = "drift-rs"
-version = "1.0.0-alpha.6"
-source = "git+https://github.com/drift-labs/drift-rs?rev=0824fc2#0824fc279132f62ae7f0de343da6286a4358e410"
+version = "1.0.0-alpha.7"
+source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.7#1908476e1db7566fc8c0f3978e7e0cfe262fa7af"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
@@ -3295,7 +3295,7 @@ dependencies = [
 [[package]]
 name = "pubsub-client-fixed"
 version = "0.1.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=0824fc2#0824fc279132f62ae7f0de343da6286a4358e410"
+source = "git+https://github.com/drift-labs/drift-rs?tag=v1.0.0-alpha.7#1908476e1db7566fc8c0f3978e7e0cfe262fa7af"
 dependencies = [
  "env_logger 0.11.6",
  "futures-util",
