@@ -285,7 +285,7 @@ async fn main() -> std::io::Result<()> {
     let client = Box::leak(Box::new(Arc::clone(state.client.borrow())));
     websocket::start_ws_server(
         format!("{}:{}", &config.host, config.ws_port).as_str(),
-        config.rpc_host.replace("http", "ws"),
+        client.ws(),
         state.wallet.inner().clone(),
         client.program_data(),
     )

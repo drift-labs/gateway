@@ -105,7 +105,7 @@ impl AppState {
     /// * `devnet` - whether to run against devnet or not
     /// * `wallet` - wallet to use for tx signing
     /// * `commitment` - Slot finalisation/commitement levels
-    /// * `default_subaccount_id` - by default all queries will use this subaccount
+    /// * `default_subaccount_id` - by default all queries will use this sub-account
     /// * `skip_tx_preflight` - submit txs without checking preflight results
     /// * `extra_rpcs` - list of additional RPC endpoints for tx submission
     pub async fn new(
@@ -180,7 +180,7 @@ impl AppState {
     ///
     /// * configured_markets - list of static markets provided by user
     ///
-    /// additional subscriptions will be included based on user's current positions (on default subaccouunt)
+    /// additional subscriptions will be included based on user's current positions (on default sub-account)
     pub(crate) async fn subscribe_market_data(&self, configured_markets: &[MarketId]) {
         let (spot, perps) = self
             .client
@@ -218,7 +218,7 @@ impl AppState {
     pub async fn get_sol_balance(&self) -> GatewayResult<SolBalanceResponse> {
         let balance = self
             .client
-            .inner()
+            .rpc()
             .get_balance(&self.wallet.inner().signer())
             .await
             .map_err(|err| ControllerError::Sdk(err.into()))?;
@@ -547,7 +547,7 @@ impl AppState {
 
         match self
             .client
-            .inner()
+            .rpc()
             .get_transaction_with_config(
                 &signature,
                 RpcTransactionConfig {
@@ -642,7 +642,7 @@ impl AppState {
         // submit to primary RPC first,
         let sig = self
             .client
-            .inner()
+            .rpc()
             .send_transaction_with_config(&tx, tx_config)
             .await
             .inspect(|s| {
@@ -659,7 +659,7 @@ impl AppState {
         // - retried at set intervals
         // - retried upto some given deadline
         // client should poll for the tx to confirm success
-        let primary_rpc = Arc::clone(&self.client);
+        let primary_rpc = Arc::clone(&self.client).rpc();
         let tx_signature = sig;
         let extra_rpcs = self.extra_rpcs.clone();
         tokio::spawn(async move {
@@ -674,11 +674,7 @@ impl AppState {
                 for rpc in extra_rpcs.iter() {
                     futs.push(rpc.send_transaction_with_config(&tx, tx_config));
                 }
-                futs.push(
-                    primary_rpc
-                        .inner()
-                        .send_transaction_with_config(&tx, tx_config),
-                );
+                futs.push(primary_rpc.send_transaction_with_config(&tx, tx_config));
 
                 while let Some(res) = futs.next().await {
                     match res {
@@ -693,11 +689,7 @@ impl AppState {
 
                 tokio::time::sleep(Duration::from_millis(400)).await;
 
-                if let Ok(Some(Ok(()))) = primary_rpc
-                    .inner()
-                    .get_signature_status(&tx_signature)
-                    .await
-                {
+                if let Ok(Some(Ok(()))) = primary_rpc.get_signature_status(&tx_signature).await {
                     confirmed = true;
                     info!(target: LOG_TARGET, "tx confirmed onchain: {tx_signature:?}");
                     break;

@@ -3,9 +3,8 @@
 use std::{collections::HashMap, ops::Neg, sync::Arc};
 
 use drift_rs::{
-    async_utils::retry_policy::{self},
     constants::ProgramData,
-    event_subscriber::{DriftEvent, EventSubscriber},
+    event_subscriber::{DriftEvent, EventSubscriber, PubsubClient},
     types::{MarketType, Order, OrderType, PositionDirection},
     Pubkey, Wallet,
 };
@@ -29,7 +28,7 @@ use crate::{
 /// Start the websocket server
 pub async fn start_ws_server(
     listen_address: &str,
-    ws_endpoint: String,
+    ws_client: Arc<PubsubClient>,
     wallet: Wallet,
     program_data: &'static ProgramData,
 ) {
@@ -42,7 +41,7 @@ pub async fn start_ws_server(
         while let Ok((stream, _)) = listener.accept().await {
             tokio::spawn(accept_connection(
                 stream,
-                ws_endpoint.clone(),
+                Arc::clone(&ws_client),
                 wallet.clone(),
                 program_data,
             ));
@@ -52,7 +51,7 @@ pub async fn start_ws_server(
 
 async fn accept_connection(
     stream: TcpStream,
-    ws_endpoint: String,
+    ws_client: Arc<PubsubClient>,
     wallet: Wallet,
     program_data: &'static ProgramData,
 ) {
@@ -102,23 +101,22 @@ async fn accept_connection(
                             }
                             info!(target: LOG_TARGET, "subscribing to events for: {}", request.sub_account_id);
 
+                            let sub_account_address =
+                                wallet.sub_account(request.sub_account_id as u16);
+                            let mut event_stream = EventSubscriber::subscribe(
+                                Arc::clone(&ws_client),
+                                sub_account_address,
+                            )
+                            .await
+                            .expect("ws connects");
+
                             let join_handle = tokio::spawn({
-                                let sub_account_address =
-                                    wallet.sub_account(request.sub_account_id as u16);
                                 let subscription_map = Arc::clone(&subscriptions);
                                 let sub_account_id = request.sub_account_id;
                                 let message_tx = message_tx.clone();
-                                let ws_endpoint = ws_endpoint.clone();
 
                                 async move {
                                     loop {
-                                        let mut event_stream = EventSubscriber::subscribe(
-                                            ws_endpoint.as_str(),
-                                            sub_account_address,
-                                            retry_policy::forever(5),
-                                        )
-                                        .await
-                                        .expect("ws connects");
                                         debug!(target: LOG_TARGET, "event stream connected: {sub_account_id:?}");
                                         while let Some(ref update) = event_stream.next().await {
                                             let (channel, data) = map_drift_event_for_account(
