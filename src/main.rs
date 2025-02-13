@@ -313,7 +313,6 @@ async fn main() -> std::io::Result<()> {
                     .service(get_collateral),
             )
     })
-    .workers(2)
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
     .bind((config.host, config.port))?
     .run()
