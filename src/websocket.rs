@@ -153,10 +153,8 @@ async fn accept_connection(
                                     warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}");
                                     subscription_map.lock().await.remove(&sub_account_id);
                                     // the event subscription task has failed
-                                    // notify the caller to handle reconnecting
-                                    let _ = message_tx.try_send(
-                                        Message::Close(None)
-                                    );
+                                    // close the Ws so client can handle resubscription
+                                    let _ = message_tx.try_send(Message::Close(None));
                                 }
                             });
                             subscription_map.insert(request.sub_account_id, join_handle);
