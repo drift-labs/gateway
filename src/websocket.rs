@@ -100,23 +100,29 @@ async fn accept_connection(
                                 continue;
                             }
                             info!(target: LOG_TARGET, "subscribing to events for: {}", request.sub_account_id);
-
-                            let sub_account_address =
-                                wallet.sub_account(request.sub_account_id as u16);
-                            let mut event_stream = EventSubscriber::subscribe(
-                                Arc::clone(&ws_client),
-                                sub_account_address,
-                            )
-                            .await
-                            .expect("ws connects");
-
                             let join_handle = tokio::spawn({
+                                let ws_client_ref = Arc::clone(&ws_client);
+                                let sub_account_address =
+                                    wallet.sub_account(request.sub_account_id as u16);
                                 let subscription_map = Arc::clone(&subscriptions);
                                 let sub_account_id = request.sub_account_id;
                                 let message_tx = message_tx.clone();
 
                                 async move {
                                     loop {
+                                        let mut event_stream = match EventSubscriber::subscribe(
+                                            Arc::clone(&ws_client_ref),
+                                            sub_account_address,
+                                        )
+                                        .await
+                                        {
+                                            Ok(stream) => stream,
+                                            Err(err) => {
+                                                log::error!(target: LOG_TARGET, "event subscribe failed: {sub_account_id:?}, {err:?}");
+                                                break;
+                                            }
+                                        };
+
                                         debug!(target: LOG_TARGET, "event stream connected: {sub_account_id:?}");
                                         while let Some(ref update) = event_stream.next().await {
                                             let (channel, data) = map_drift_event_for_account(
@@ -143,12 +149,11 @@ async fn accept_connection(
                                                 break;
                                             }
                                         }
-                                        warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}, reconnecting...");
-                                        subscription_map.lock().await.remove(&sub_account_id);
                                     }
+                                    warn!(target: LOG_TARGET, "event stream finished: {sub_account_id:?}");
+                                    subscription_map.lock().await.remove(&sub_account_id);
                                 }
                             });
-
                             subscription_map.insert(request.sub_account_id, join_handle);
                         }
                         Method::Unsubscribe => {
@@ -182,6 +187,11 @@ async fn accept_connection(
             // tokio-tungstenite handles ping/pong transparently
             _ => (),
         }
+    }
+
+    let subs = subscriptions.lock().await;
+    for (_k, task) in subs.iter() {
+        task.abort();
     }
     info!(target: LOG_TARGET, "closing Ws connection: {}", addr);
 }
