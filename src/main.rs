@@ -218,6 +218,10 @@ async fn main() -> std::io::Result<()> {
         logger
             .filter_module(LOG_TARGET, log::LevelFilter::Debug)
             .filter_module("rpc", log::LevelFilter::Debug)
+            .filter_module("ws", log::LevelFilter::Debug)
+            .filter_module("wsaccsub", log::LevelFilter::Debug)
+            .filter_module("marketmap", log::LevelFilter::Debug)
+            .filter_module("oraclemap", log::LevelFilter::Debug)
     } else {
         logger.filter_module(LOG_TARGET, log::LevelFilter::Info)
     }
