@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y libgcc1
 WORKDIR /build
 COPY  . .
 RUN rustup component add rustfmt && rustup install 1.76.0-x86_64-unknown-linux-gnu
-RUN curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.107.0/libdrift_ffi_sys.so -o libdrift_ffi_sys.so && cp libdrift_ffi_sys.so /usr/local/lib
+RUN curl -L https://github.com/drift-labs/drift-ffi-sys/releases/download/v2.110.0/libdrift_ffi_sys.so -o libdrift_ffi_sys.so && cp libdrift_ffi_sys.so /usr/local/lib
 
 # DEV: choose to build drift system libs from source or not
 # a) default: use prebuilt lib (faster build time)
