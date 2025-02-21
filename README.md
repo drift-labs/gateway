@@ -78,18 +78,14 @@ docker run \
 
 Build:
 
-Supports latest rust stable
-
-⚠️ requires an `x86_64` arch toolchain e.g. `1.81.0-x86_64-unknown-linux-gnu`
+Supports latest rust stable (⚠️ requires an `x86_64` toolchain)
 
 ```bash
-# install libdrift_ffi
-curl -L https://github.com/user-attachments/files/17126152/libdrift_ffi_sys.so.zip > ffi.zip &&\
-  unzip ffi.zip &&\
-  ln -sf libdrift_ffi_sys.so /usr/local/lib
+# e.g for linux-gnu
+rustup install 1.76.0-x86_64-unknown-linux-gnu      # install old toolchain required to build drift-ffi-sys
+rustup override set stable-x86_64-unknown-linux-gnu # latest stable x86_64 toolchain
 
-# make a release build from source
-CARGO_DRIFT_FFI_PATH='/usr/local/lib' cargo build --release
+cargo build --release
 ```
 
 Run:
