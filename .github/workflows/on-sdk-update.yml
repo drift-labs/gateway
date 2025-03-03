@@ -1,0 +1,40 @@
+name: Bump drift-rs version
+on:
+  repository_dispatch:
+    types: ['drift_rs_release']
+
+jobs:
+  update-sdk:
+    runs-on: ubicloud
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Load drift-rs version
+      run: |
+          echo "SDK_VERSION=${{ github.event.client_payload.tag }}" >> $GITHUB_ENV
+
+    - name: Update drift-rs
+      run: | 
+        sed -i '/^drift-rs/s/tag = ".*"/tag = "'$SDK_VERSION'"/' Cargo.toml
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Check build
+      run: |
+        cargo check
+
+    - name: Make PR
+      run: |
+        # make PR
+        git config user.name "GitHub Actions"
+        git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+        git checkout -b bump/$SDK_VERSION
+        git add -u
+        git commit --allow-empty -m "drift-rs: bump v$SDK_VERSION/$FFI_VERSION 🤖"
+        git push origin bump/$SDK_VERSION -f
