@@ -35,6 +35,6 @@ jobs:
         git config user.name "GitHub Actions"
         git config user.email 41898282+github-actions[bot]@users.noreply.github.com
         git checkout -b bump/$SDK_VERSION
-        git add -A
-        git commit --allow-empty -m "drift-rs: bump v$SDK_VERSION/$FFI_VERSION"
-        git push origin bump/$SDK_VERSION
+        git add -u
+        git commit --allow-empty -m "drift-rs: bump v$SDK_VERSION/$FFI_VERSION 🤖"
+        git push origin bump/$SDK_VERSION -f
