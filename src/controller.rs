@@ -29,7 +29,9 @@ use drift_rs::{
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
-use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
+use solana_rpc_client_api::{
+    client_error::ErrorKind as ClientErrorKind, config::RpcTransactionConfig,
+};
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 use thiserror::Error;
@@ -48,7 +50,7 @@ use crate::{
 };
 
 /// Default TTL in seconds of gateway tx retry
-/// afterwhich gateway will no longer resubmit or monitor the tx
+/// after which gateway will no longer resubmit or monitor the tx
 // ~10 slots
 const DEFAULT_TX_TTL: u16 = 4;
 
