@@ -1,6 +1,6 @@
 FROM rust:1.84.1 AS builder
 
-RUN apt-get update && apt-get install -y libgcc1
+RUN apt-get update && apt-get install -y libgcc1 jq
 WORKDIR /build
 COPY  . .
 RUN rustup component add rustfmt
