@@ -26,7 +26,7 @@ use drift_rs::{
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use futures_util::{stream::FuturesUnordered, StreamExt};
+use futures_util::{stream::FuturesOrdered, stream::FuturesUnordered, StreamExt};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
@@ -283,7 +283,7 @@ impl AppState {
             .iter()
             .map(|x| self.client.get_spot_market_account(x.market_index));
 
-        let spot_market_futs = FuturesUnordered::from_iter(spot_market_futs);
+        let spot_market_futs = FuturesOrdered::from_iter(spot_market_futs);
         let spot_markets = spot_market_futs
             .collect::<Vec<SdkResult<SpotMarket>>>()
             .await;
