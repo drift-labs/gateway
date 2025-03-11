@@ -26,7 +26,7 @@ use drift_rs::{
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use futures_util::{stream::FuturesOrdered, StreamExt};
+use futures_util::{stream::FuturesOrdered, stream::FuturesUnordered, StreamExt};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_client::{client_error::ClientErrorKind, rpc_config::RpcTransactionConfig};
