@@ -11,8 +11,8 @@ use drift_rs::{
     types::{
         self as sdk_types,
         accounts::{PerpMarket, SpotMarket},
-        MarketPrecision, MarketType, ModifyOrderParams, OrderParams, PositionDirection,
-        PostOnlyParam,
+        MarketPrecision, MarketType, ModifyOrderParams, OrderParams, OrderTriggerCondition,
+        PositionDirection, PostOnlyParam,
     },
     Wallet,
 };
@@ -246,6 +246,10 @@ pub struct PlaceOrder {
     amount: Decimal,
     #[serde(default)]
     price: Decimal,
+    #[serde(default)]
+    trigger_price: Option<Decimal>,
+    #[serde(default)]
+    trigger_condition: Option<OrderTriggerCondition>,
     /// 0 indicates it is not set (according to program)
     #[serde(default)]
     pub user_order_id: u8,
@@ -333,6 +337,10 @@ impl PlaceOrder {
                 .oracle_price_offset
                 .map(|x| scale_decimal_to_i64(x, PRICE_PRECISION as u32) as i32),
             max_ts: self.max_ts,
+            trigger_price: self
+                .trigger_price
+                .map(|v| scale_decimal_to_u64(v, PRICE_PRECISION as u32)),
+            trigger_condition: self.trigger_condition.unwrap_or_default(),
             ..Default::default()
         }
     }
@@ -615,7 +623,7 @@ mod tests {
 
     use drift_rs::{
         math::constants::BASE_PRECISION,
-        types::{MarketType, OrderType, PositionDirection},
+        types::{MarketType, OrderTriggerCondition, OrderType, PositionDirection},
     };
 
     use super::{Decimal, PlaceOrder};
@@ -670,6 +678,41 @@ mod tests {
             } else {
                 assert_eq!(order_params.direction, PositionDirection::Long);
             }
+        }
+    }
+
+    #[test]
+    fn place_order_to_order_trigger_works() {
+        let cases = [
+            ("0.1234", Some(OrderTriggerCondition::Below), 123_400u64),
+            ("123", Some(OrderTriggerCondition::Above), 123_000_000),
+            (
+                "1.23",
+                Some(OrderTriggerCondition::TriggeredBelow),
+                1_230_000,
+            ),
+            (
+                "-1.23",
+                Some(OrderTriggerCondition::TriggeredAbove),
+                1_230_000,
+            ),
+            ("5.123456789", None, 5_123_456), // truncates extra decimals
+        ];
+        for (input_trigger_price, input_trigger_condition, expected) in cases {
+            let p = PlaceOrder {
+                order_type: OrderType::TriggerLimit,
+                trigger_price: Decimal::from_str(input_trigger_price).ok(),
+                trigger_condition: input_trigger_condition,
+                market: Market::perp(0),
+                amount: Decimal::from_str("1").unwrap(),
+                ..Default::default()
+            };
+            let order_params = p.to_order_params(9);
+            assert_eq!(order_params.trigger_price, Some(expected));
+            assert_eq!(
+                order_params.trigger_condition,
+                input_trigger_condition.unwrap_or_default()
+            );
         }
     }
 
