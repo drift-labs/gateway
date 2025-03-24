@@ -86,6 +86,8 @@ rustup install 1.76.0-x86_64-unknown-linux-gnu      # install old toolchain requ
 rustup override set stable-x86_64-unknown-linux-gnu # latest stable x86_64 toolchain
 
 cargo build --release
+# On linux. run `ldconfig` to ensure libdrift is linked after build
+ldconfig
 ```
 
 Run:
