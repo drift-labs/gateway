@@ -29,7 +29,7 @@ use crate::{
 pub async fn start_ws_server(
     listen_address: &str,
     ws_client: Arc<PubsubClient>,
-    wallet: Wallet,
+    wallet: Arc<Wallet>,
     program_data: &'static ProgramData,
 ) {
     // Create the event loop and TCP listener we'll accept connections on.
@@ -42,7 +42,7 @@ pub async fn start_ws_server(
             tokio::spawn(accept_connection(
                 stream,
                 Arc::clone(&ws_client),
-                wallet.clone(),
+                Arc::clone(&wallet),
                 program_data,
             ));
         }
@@ -52,7 +52,7 @@ pub async fn start_ws_server(
 async fn accept_connection(
     stream: TcpStream,
     ws_client: Arc<PubsubClient>,
-    wallet: Wallet,
+    wallet: Arc<Wallet>,
     program_data: &'static ProgramData,
 ) {
     let addr = stream.peer_addr().expect("peer address");

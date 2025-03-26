@@ -14,6 +14,7 @@ use drift_rs::{
 };
 use log::{debug, info, warn};
 use serde_json::json;
+use types::SetLeverageRequest;
 
 use crate::{
     controller::{create_wallet, AppState, ControllerError},
@@ -197,6 +198,21 @@ async fn get_leverage(controller: web::Data<AppState>, ctx: web::Query<Context>)
     handle_result(controller.get_leverage(ctx.0).await)
 }
 
+#[post("/leverage")]
+async fn set_leverage(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    ctx: web::Query<Context>,
+) -> impl Responder {
+    match serde_json::from_slice::<'_, SetLeverageRequest>(body.as_ref()) {
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(controller.set_margin_ratio(ctx.0, req.leverage).await)
+        }
+        Err(err) => handle_deser_error(err),
+    }
+}
+
 #[get("/collateral")]
 async fn get_collateral(
     controller: web::Data<AppState>,
@@ -290,7 +306,7 @@ async fn main() -> std::io::Result<()> {
     websocket::start_ws_server(
         format!("{}:{}", &config.host, config.ws_port).as_str(),
         client.ws(),
-        state.wallet.inner().clone(),
+        Arc::clone(&state.wallet),
         client.program_data(),
     )
     .await;
@@ -314,6 +330,7 @@ async fn main() -> std::io::Result<()> {
                     .service(get_market_info)
                     .service(get_margin_info)
                     .service(get_leverage)
+                    .service(set_leverage)
                     .service(get_collateral),
             )
     })
@@ -467,7 +484,7 @@ mod tests {
         AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await
     }
 
-    // likely safe to ignore during development, mainy regression tests for CI
+    // likely safe to ignore during development, mainly regression test for CI
     #[actix_web::test]
     async fn delegated_signing_ok() {
         let _ = env_logger::try_init();
@@ -502,6 +519,25 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
         dbg!(resp.response().body());
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn set_leverage_works() {
+        let controller = setup_controller(None).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(controller))
+                .service(set_leverage),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .method(Method::POST)
+            .uri("/leverage")
+            .set_payload("{\"leverage\":\"2.01\"}")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
     }
 

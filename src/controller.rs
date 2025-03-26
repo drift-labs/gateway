@@ -11,7 +11,7 @@ use drift_rs::{
     drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     math::{
-        constants::BASE_PRECISION,
+        constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
         liquidation::{
             calculate_collateral, calculate_liquidation_price_and_unrealized_pnl,
@@ -39,11 +39,10 @@ use thiserror::Error;
 use crate::{
     types::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-        GatewayWallet, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition,
-        TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
-        UserMarginResponse, WalletMode, PRICE_DECIMALS,
+        GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
+        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
+        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
+        UserCollateralResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -70,7 +69,7 @@ pub enum ControllerError {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub wallet: Arc<GatewayWallet>,
+    pub wallet: Arc<Wallet>,
     pub client: Arc<DriftClient>,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
@@ -86,18 +85,17 @@ pub struct AppState {
 impl AppState {
     /// Configured drift authority address
     pub fn authority(&self) -> &Pubkey {
-        self.wallet.inner().authority()
+        self.wallet.authority()
     }
     /// Configured drift signing address
     pub fn signer(&self) -> Pubkey {
-        self.wallet.inner().signer()
+        self.wallet.signer()
     }
     pub fn default_sub_account(&self) -> Pubkey {
-        self.wallet.inner().sub_account(self.default_subaccount_id)
+        self.wallet.sub_account(self.default_subaccount_id)
     }
     pub fn resolve_sub_account(&self, sub_account_id: Option<u16>) -> Pubkey {
         self.wallet
-            .inner()
             .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
     }
 
@@ -113,7 +111,7 @@ impl AppState {
     pub async fn new(
         endpoint: &str,
         devnet: bool,
-        wallet: GatewayWallet,
+        wallet: Wallet,
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
         default_subaccount_id: Option<u16>,
         skip_tx_preflight: bool,
@@ -128,13 +126,11 @@ impl AppState {
         };
 
         let rpc_client = RpcClient::new_with_commitment(endpoint.into(), state_commitment);
-        let client = DriftClient::new(context, rpc_client, wallet.inner().clone())
+        let client = DriftClient::new(context, rpc_client, wallet.clone())
             .await
             .expect("ok");
 
-        let default_subaccount = wallet
-            .inner()
-            .sub_account(default_subaccount_id.unwrap_or(0));
+        let default_subaccount = wallet.sub_account(default_subaccount_id.unwrap_or(0));
         if let Err(err) = client.subscribe_account(&default_subaccount).await {
             log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}");
         } else {
@@ -154,7 +150,7 @@ impl AppState {
             },
         );
 
-        let priority_fee_subscriber = if wallet.is_emulating() {
+        let priority_fee_subscriber = if wallet.is_read_only() {
             Arc::new(priority_fee_subscriber)
         } else {
             client
@@ -221,7 +217,7 @@ impl AppState {
         let balance = self
             .client
             .rpc()
-            .get_balance(&self.wallet.inner().signer())
+            .get_balance(&self.wallet.signer())
             .await
             .map_err(|err| ControllerError::Sdk(err.into()))?;
         Ok(SolBalanceResponse {
@@ -622,6 +618,31 @@ impl AppState {
         }
     }
 
+    pub async fn set_margin_ratio(
+        &self,
+        ctx: Context,
+        new_margin_ratio: Decimal,
+    ) -> GatewayResult<TxResponse> {
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
+        let sub_account_address = self.wallet.sub_account(sub_account_id);
+        let account_data = self.client.get_user_account(&sub_account_address).await?;
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account_address,
+            Cow::Owned(account_data),
+            self.wallet.is_delegated(),
+        )
+        .set_max_initial_margin_ratio(
+            // "1.0"  1x, "0.1", 0.1x, 4 => 4x
+            (Decimal::new(1, MARGIN_PRECISION.ilog10()) / new_margin_ratio)
+                .try_into()
+                .unwrap(),
+            sub_account_id,
+        )
+        .build();
+        self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
+    }
+
     fn get_priority_fee(&self) -> u64 {
         self.priority_fee_subscriber.priority_fee_nth(0.9)
     }
@@ -633,7 +654,7 @@ impl AppState {
         ttl: Option<u16>,
     ) -> GatewayResult<TxResponse> {
         let recent_block_hash = self.client.get_latest_blockhash().await?;
-        let tx = self.wallet.inner().sign_tx(tx, recent_block_hash)?;
+        let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
         let tx_config = RpcSendTransactionConfig {
             max_retries: Some(0),
             preflight_commitment: Some(self.tx_commitment.commitment),
@@ -793,20 +814,15 @@ pub fn create_wallet(
     secret_key: Option<String>,
     emulate: Option<Pubkey>,
     delegate: Option<Pubkey>,
-) -> GatewayWallet {
+) -> Wallet {
     match (&secret_key, emulate, delegate) {
-        (Some(secret_key), _, delegate) => {
-            let mut wallet = Wallet::try_from_str(secret_key).expect("valid key");
-            if let Some(authority) = delegate {
-                wallet.to_delegated(authority);
-                GatewayWallet::new(wallet, WalletMode::Delegated)
-            } else {
-                GatewayWallet::new(wallet, WalletMode::Normal)
-            }
+        (Some(secret_key), _, None) => Wallet::try_from_str(secret_key).expect("valid key"),
+        (Some(secret_key), _, Some(delegate)) => {
+            let keypair =
+                drift_rs::utils::load_keypair_multi_format(secret_key).expect("valid key");
+            Wallet::delegated(keypair, delegate)
         }
-        (None, Some(emulate), None) => {
-            GatewayWallet::new(Wallet::read_only(emulate), WalletMode::Normal)
-        }
+        (None, Some(emulate), None) => Wallet::read_only(emulate),
         _ => {
             panic!("expected 'DRIFT_GATEWAY_KEY' or --emulate <pubkey>");
         }
