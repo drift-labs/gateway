@@ -626,6 +626,10 @@ impl AppState {
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
         let sub_account_address = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account_address).await?;
+
+        let margin_ratio =
+            Decimal::new(MARGIN_PRECISION as i64, MARGIN_PRECISION.ilog10()) / new_margin_ratio;
+
         let tx = TransactionBuilder::new(
             self.client.program_data(),
             sub_account_address,
@@ -634,9 +638,7 @@ impl AppState {
         )
         .set_max_initial_margin_ratio(
             // "1.0"  1x, "0.1", 0.1x, 4 => 4x
-            (Decimal::new(1, MARGIN_PRECISION.ilog10()) / new_margin_ratio)
-                .try_into()
-                .unwrap(),
+            margin_ratio.mantissa().try_into().unwrap(),
             sub_account_id,
         )
         .build();
