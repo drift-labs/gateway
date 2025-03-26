@@ -6,8 +6,7 @@ edition = "2021"
 [dependencies]
 actix-web = "*"
 argh = "*"
-# drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "6e15918" }
-drift-rs = { path = "../drift-rs" }
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "6baf29a" }
 env_logger = "*"
 futures-util = "*"
 log = "*"
@@ -20,3 +19,6 @@ solana-transaction-status = "2"
 thiserror = "*"
 tokio = "*"
 tokio-tungstenite = "*"
+
+[profile.release]
+panic = 'abort'
