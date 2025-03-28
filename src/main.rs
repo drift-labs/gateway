@@ -311,6 +311,24 @@ async fn main() -> std::io::Result<()> {
     )
     .await;
 
+    // Ws health check task
+    let rpc_node_ws_conn = client.ws();
+    tokio::spawn(async move {
+        let mut health_check_interval = tokio::time::interval(Duration::from_secs(30));
+        let _ = health_check_interval.tick().await;
+        loop {
+            let _ = health_check_interval.tick().await;
+            if !rpc_node_ws_conn.is_running() {
+                log::error!(
+                    "Solana Ws could not auto-reconnect, refusing to continue with stale data."
+                );
+                log::error!("Review gateway logs or restart with '--verbose' to debug");
+                log::error!("shutting down...");
+                std::process::exit(1);
+            }
+        }
+    });
+
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::new("%a | %s | %r | (%Dms)").log_target(LOG_TARGET))
