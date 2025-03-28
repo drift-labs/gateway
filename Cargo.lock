@@ -1056,9 +1056,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck_derive"
-version = "1.9.2"
+version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ff22c2722516255d1823ce3cc4bc0b154dbc9364be5c905d6baa6eccbbc8774"
+checksum = "7ecc273b49b3205b83d648f0690daa588925572cc5063745bfe547fe7ec8e1a1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1488,7 +1488,7 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.3.6"
+version = "1.4.0"
 dependencies = [
  "actix-web",
  "argh",
@@ -1510,7 +1510,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.2.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=d6aa98f#d6aa98f8ec1e6bc3648ebb68c58442f31d6da5bd"
+source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1523,7 +1523,7 @@ dependencies = [
 [[package]]
 name = "drift-pubsub-client"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=d6aa98f#d6aa98f8ec1e6bc3648ebb68c58442f31d6da5bd"
+source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
 dependencies = [
  "futures-util",
  "gjson",
@@ -1543,7 +1543,7 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0-alpha.13"
-source = "git+https://github.com/drift-labs/drift-rs?rev=d6aa98f#d6aa98f8ec1e6bc3648ebb68c58442f31d6da5bd"
+source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
@@ -2214,9 +2214,9 @@ dependencies = [
 
 [[package]]
 name = "icu_locid_transform_data"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdc8ff3388f852bede6b579ad4e978ab004f139284d7b28715f773507b946f6e"
+checksum = "7515e6d781098bf9f7205ab3fc7e9709d34554ae0b21ddbcb5febfa4bc7df11d"
 
 [[package]]
 name = "icu_normalizer"
@@ -2238,9 +2238,9 @@ dependencies = [
 
 [[package]]
 name = "icu_normalizer_data"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8cafbf7aa791e9b22bec55a167906f9e1215fd475cd22adfcf660e03e989516"
+checksum = "c5e8338228bdc8ab83303f16b797e177953730f601a96c25d10cb3ab0daa0cb7"
 
 [[package]]
 name = "icu_properties"
@@ -2259,9 +2259,9 @@ dependencies = [
 
 [[package]]
 name = "icu_properties_data"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67a8effbc3dd3e4ba1afa8ad918d5684b8868b3b26500753effea8d2eed19569"
+checksum = "85fb8799753b75aee8d2a21d7c14d9f38921b54b3dbda10f5a3c7a7b82dba5e2"
 
 [[package]]
 name = "icu_provider"
@@ -2811,9 +2811,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.1"
+version = "1.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75b0bedcc4fe52caa0e03d9f1151a323e4aa5e2d78ba3580400cd3c9e2bc4bc"
+checksum = "c2806eaa3524762875e21c3dcd057bc4b7bfa01ce4da8d46be1cd43649e1cc6b"
 
 [[package]]
 name = "opaque-debug"
