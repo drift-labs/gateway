@@ -24,6 +24,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`GET` SOL Balance](#get-sol-balance)
       - [`GET` Margin Info](#get-margin-info)
       - [`GET` Leverage](#get-leverage)
+      - [`POST` Leverage](#set-leverage)
       - [`GET` Collateral](#get-collateral)
       - [`POST` Place Orders](#place-orders)
       - [`PATCH` Modify Orders](#modify-orders)
@@ -305,6 +306,18 @@ $ curl localhost:8080/v2/leverage
    "leverage" : "0.094489"
 }
 ```
+
+## Set Leverage
+Set the max initial margin / leverage on sub-account
+
+```bash
+# max 2x
+$ curl localhost:8080/v2/leverage -d '{"leverage":"2.0"}'
+# max .1x
+$ curl localhost:8080/v2/leverage -d '{"leverage":"0.1"}'
+```
+
+Returns solana tx signature on success
 
 ## Get Collateral
 Returns the account's maintenance collateral
