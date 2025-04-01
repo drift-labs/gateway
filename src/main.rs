@@ -651,6 +651,7 @@ mod tests {
 
     #[actix_web::test]
     async fn get_tx_events_works() {
+        let _ = env_logger::try_init();
         let controller = setup_controller(Some(
             Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
         ))
@@ -702,6 +703,7 @@ mod tests {
 
     #[actix_web::test]
     async fn get_tx_events_works_for_wrong_subaccount() {
+        let _ = env_logger::try_init();
         let controller = setup_controller(Some(
             Pubkey::from_str("8kEGX9UNrtKATDjL3ED1dmURzyASsXDe9vGzncMhsTN2").expect("pubkey"),
         ))
