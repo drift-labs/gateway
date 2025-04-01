@@ -1488,12 +1488,12 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "actix-web",
  "argh",
  "drift-rs",
- "env_logger 0.11.7",
+ "env_logger 0.9.3",
  "futures-util",
  "log",
  "rust_decimal",
@@ -1502,7 +1502,7 @@ dependencies = [
  "solana-rpc-client-api",
  "solana-sdk",
  "solana-transaction-status",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",
 ]
@@ -1510,7 +1510,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.2.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
+source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1523,7 +1523,7 @@ dependencies = [
 [[package]]
 name = "drift-pubsub-client"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
+source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
 dependencies = [
  "futures-util",
  "gjson",
@@ -1542,8 +1542,8 @@ dependencies = [
 
 [[package]]
 name = "drift-rs"
-version = "1.0.0-alpha.13"
-source = "git+https://github.com/drift-labs/drift-rs?rev=91b3dd8c#91b3dd8cee061a3d7f4d407b2f02d26ec42b1062"
+version = "1.0.0-alpha.14"
+source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
