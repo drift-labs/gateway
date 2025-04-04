@@ -186,10 +186,23 @@ impl AppState {
             .await
             .expect("loaded user positions");
 
+        let open_orders = self
+            .client
+            .all_orders(&self.default_sub_account())
+            .await
+            .expect("failed to load user orders");
+
         let mut user_markets: Vec<MarketId> = spot
             .iter()
             .map(|s| MarketId::spot(s.market_index))
             .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
+            .chain(open_orders.iter().map(|o| {
+                if (o.market_type == MarketType::Spot) {
+                    MarketId::spot(o.market_index)
+                } else {
+                    MarketId::perp(o.market_index)
+                }
+            }))
             .collect();
         user_markets.push(MarketId::QUOTE_SPOT); // usdc needed for most functions
         user_markets.extend_from_slice(configured_markets);
