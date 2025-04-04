@@ -277,6 +277,9 @@ async fn main() -> std::io::Result<()> {
     state.subscribe_market_data(&markets).await;
     info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
 
+    state.sync_market_data_on_user_changes(&markets).await;
+    info!(target: LOG_TARGET, "subscribed to user account updates 🛜");
+
     info!(
         target: LOG_TARGET,
         "🏛️ gateway listening at http://{}:{}", config.host, config.port
