@@ -9,7 +9,7 @@ use std::{
 use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
-    event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
+    event_subscriber::{try_parse_log, CommitmentConfig, PubsubClient, RpcClient},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -29,8 +29,10 @@ use drift_rs::{
 use futures_util::{stream::FuturesOrdered, stream::FuturesUnordered, StreamExt};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
+use solana_account_decoder_client_types::UiAccountEncoding;
 use solana_rpc_client_api::{
-    client_error::ErrorKind as ClientErrorKind, config::RpcTransactionConfig,
+    client_error::ErrorKind as ClientErrorKind,
+    config::{RpcAccountInfoConfig, RpcTransactionConfig},
 };
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
@@ -71,6 +73,7 @@ pub enum ControllerError {
 pub struct AppState {
     pub wallet: Arc<Wallet>,
     pub client: Arc<DriftClient>,
+    rpc_endpoint: String,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
@@ -171,7 +174,43 @@ impl AppState {
                 .into_iter()
                 .map(|u| Arc::new(RpcClient::new(get_http_url(u).expect("valid RPC url"))))
                 .collect(),
+            rpc_endpoint: endpoint.to_string(),
         }
+    }
+
+    pub(crate) async fn sync_market_data_on_user_changes(&self, configured_markets: &[MarketId]) {
+        let default_sub_account = self.default_sub_account();
+        let state_commitment = self.tx_commitment;
+        let endpoint = self.rpc_endpoint.clone();
+        let configured_markets_vec = configured_markets.to_vec();
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let pubsub_config = RpcAccountInfoConfig {
+                commitment: Some(state_commitment),
+                data_slice: None,
+                encoding: Some(UiAccountEncoding::JsonParsed),
+                min_context_slot: None,
+            };
+            let pubsub_client = PubsubClient::new(endpoint.replace("https", "wss").as_str())
+                .await
+                .expect("pubsub client init");
+            let (mut account_subscription, unsubscribe_fn) = pubsub_client
+                .account_subscribe(&default_sub_account, Some(pubsub_config))
+                .await
+                .expect("user account pubsub subscribe");
+
+            info!(target: LOG_TARGET, "Pubsub successfully subscribed to user account updates!");
+
+            // Process incoming account updates
+            while let Some(_) = account_subscription.next().await {
+                // refresh market subscriptions based on any new user positions
+                self_clone
+                    .subscribe_market_data(&configured_markets_vec)
+                    .await;
+            }
+
+            unsubscribe_fn().await;
+        });
     }
 
     /// Start market and oracle data subscriptions
@@ -186,10 +225,23 @@ impl AppState {
             .await
             .expect("loaded user positions");
 
+        let open_orders = self
+            .client
+            .all_orders(&self.default_sub_account())
+            .await
+            .expect("failed to load user orders");
+
         let mut user_markets: Vec<MarketId> = spot
             .iter()
             .map(|s| MarketId::spot(s.market_index))
             .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
+            .chain(open_orders.iter().map(|o| {
+                if (o.market_type == MarketType::Spot) {
+                    MarketId::spot(o.market_index)
+                } else {
+                    MarketId::perp(o.market_index)
+                }
+            }))
             .collect();
         user_markets.push(MarketId::QUOTE_SPOT); // usdc needed for most functions
         user_markets.extend_from_slice(configured_markets);
