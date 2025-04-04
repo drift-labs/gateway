@@ -69,12 +69,6 @@ pub enum ControllerError {
     TxNotFound { tx_sig: String },
 }
 
-#[derive(Error, Debug)]
-pub enum AppStateError {
-    #[error("failed to process user update")]
-    FailedProcessingUserUpdate,
-}
-
 #[derive(Clone)]
 pub struct AppState {
     pub wallet: Arc<Wallet>,
