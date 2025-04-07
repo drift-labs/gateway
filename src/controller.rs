@@ -176,12 +176,17 @@ impl AppState {
         }
     }
 
-    pub(crate) async fn sync_market_data_on_user_changes(&self, configured_markets: &[MarketId]) {
+    pub(crate) async fn sync_market_data_on_user_changes(
+        &self,
+        configured_markets: &[MarketId],
+    ) -> Result<(), SdkError> {
         let default_sub_account = self.default_sub_account();
         let state_commitment = self.tx_commitment;
         let endpoint = self.client.rpc().url();
         let configured_markets_vec = configured_markets.to_vec();
         let self_clone = self.clone();
+        let mut current_user_markets_to_subscribe = self.get_marketids_to_subscribe().await?;
+
         tokio::spawn(async move {
             let pubsub_config = RpcAccountInfoConfig {
                 commitment: Some(state_commitment),
@@ -189,50 +194,69 @@ impl AppState {
                 encoding: Some(UiAccountEncoding::JsonParsed),
                 min_context_slot: None,
             };
-            let pubsub_client = PubsubClient::new(endpoint.replace("https", "wss").as_str())
-                .await
-                .expect("pubsub client init");
-            let (mut account_subscription, unsubscribe_fn) = pubsub_client
+
+            let pubsub_client =
+                match PubsubClient::new(endpoint.replace("https", "wss").as_str()).await {
+                    Ok(client) => client,
+                    Err(err) => {
+                        warn!(target: LOG_TARGET, "failed to create pubsub client: {err:?}");
+                        return;
+                    }
+                };
+
+            let (mut account_subscription, unsubscribe_fn) = match pubsub_client
                 .account_subscribe(&default_sub_account, Some(pubsub_config))
                 .await
-                .expect("user account pubsub subscribe");
+            {
+                Ok(res) => res,
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "failed to subscribe to account: {err:?}");
+                    return;
+                }
+            };
 
             info!(target: LOG_TARGET, "Pubsub successfully subscribed to user account updates!");
 
             // Process incoming account updates
             while let Some(_) = account_subscription.next().await {
-                // refresh market subscriptions based on any new user positions
-                self_clone
-                    .subscribe_market_data(&configured_markets_vec)
-                    .await;
+                let current_market_ids_count = current_user_markets_to_subscribe.len();
+                match self_clone.get_marketids_to_subscribe().await {
+                    Ok(new_market_ids) => {
+                        if new_market_ids.len() != current_market_ids_count {
+                            if let Err(err) = self_clone
+                                .subscribe_market_data(&configured_markets_vec)
+                                .await
+                            {
+                                warn!(target: LOG_TARGET, "error refreshing market subscriptions: {err:?}");
+                            }
+                        }
+
+                        current_user_markets_to_subscribe = new_market_ids;
+                    }
+                    Err(err) => {
+                        warn!(target: LOG_TARGET, "error getting user account during market_data sync: {err:?}");
+                    }
+                }
             }
 
             unsubscribe_fn().await;
         });
+
+        Ok(())
     }
 
-    /// Start market and oracle data subscriptions
-    ///
-    /// * configured_markets - list of static markets provided by user
-    ///
-    /// additional subscriptions will be included based on user's current positions (on default sub-account)
-    pub(crate) async fn subscribe_market_data(&self, configured_markets: &[MarketId]) {
-        let (spot, perps) = self
+    async fn get_marketids_to_subscribe(&self) -> Result<Vec<MarketId>, SdkError> {
+        let (all_spot, all_perp) = self
             .client
             .all_positions(&self.default_sub_account())
-            .await
-            .expect("loaded user positions");
+            .await?;
 
-        let open_orders = self
-            .client
-            .all_orders(&self.default_sub_account())
-            .await
-            .expect("failed to load user orders");
+        let open_orders = self.client.all_orders(&self.default_sub_account()).await?;
 
-        let mut user_markets: Vec<MarketId> = spot
+        let mut user_markets: Vec<MarketId> = all_spot
             .iter()
             .map(|s| MarketId::spot(s.market_index))
-            .chain(perps.iter().map(|p| MarketId::perp(p.market_index)))
+            .chain(all_perp.iter().map(|p| MarketId::perp(p.market_index)))
             .chain(open_orders.iter().map(|o| {
                 if (o.market_type == MarketType::Spot) {
                     MarketId::spot(o.market_index)
@@ -241,7 +265,21 @@ impl AppState {
                 }
             }))
             .collect();
-        user_markets.push(MarketId::QUOTE_SPOT); // usdc needed for most functions
+        user_markets.push(MarketId::QUOTE_SPOT);
+
+        Ok(user_markets)
+    }
+
+    /// Start market and oracle data subscriptions
+    ///
+    /// * configured_markets - list of static markets provided by user
+    ///
+    /// additional subscriptions will be included based on user's current positions (on default sub-account)
+    pub(crate) async fn subscribe_market_data(
+        &self,
+        configured_markets: &[MarketId],
+    ) -> Result<(), SdkError> {
+        let mut user_markets = self.get_marketids_to_subscribe().await?;
         user_markets.extend_from_slice(configured_markets);
 
         let init_rpc_throttle: u64 = std::env::var("INIT_RPC_THROTTLE")
@@ -251,15 +289,11 @@ impl AppState {
         let markets = Vec::from_iter(HashSet::<MarketId>::from_iter(user_markets).into_iter());
         info!(target: LOG_TARGET, "start market subscriptions: {markets:?}");
         tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
-        self.client
-            .subscribe_oracles(&markets)
-            .await
-            .expect("oracles subscribed");
+        self.client.subscribe_oracles(&markets).await?;
         tokio::time::sleep(Duration::from_secs(init_rpc_throttle)).await;
-        self.client
-            .subscribe_markets(&markets)
-            .await
-            .expect("markets subscribed");
+        self.client.subscribe_markets(&markets).await?;
+
+        Ok(())
     }
 
     /// Return SOL balance of the tx signing account
