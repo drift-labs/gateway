@@ -73,7 +73,6 @@ pub enum ControllerError {
 pub struct AppState {
     pub wallet: Arc<Wallet>,
     pub client: Arc<DriftClient>,
-    rpc_endpoint: String,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
@@ -174,14 +173,13 @@ impl AppState {
                 .into_iter()
                 .map(|u| Arc::new(RpcClient::new(get_http_url(u).expect("valid RPC url"))))
                 .collect(),
-            rpc_endpoint: endpoint.to_string(),
         }
     }
 
     pub(crate) async fn sync_market_data_on_user_changes(&self, configured_markets: &[MarketId]) {
         let default_sub_account = self.default_sub_account();
         let state_commitment = self.tx_commitment;
-        let endpoint = self.rpc_endpoint.clone();
+        let endpoint = self.client.rpc().url();
         let configured_markets_vec = configured_markets.to_vec();
         let self_clone = self.clone();
         tokio::spawn(async move {
