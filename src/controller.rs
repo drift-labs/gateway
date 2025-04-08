@@ -228,6 +228,8 @@ impl AppState {
                                 .await
                             {
                                 warn!(target: LOG_TARGET, "error refreshing market subscriptions: {err:?}");
+                            } else {
+                                info!(target: LOG_TARGET, "market subscriptions refreshed due to updated position/order state");
                             }
                         }
 
