@@ -9,7 +9,7 @@ use std::{
 use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
-    event_subscriber::{try_parse_log, CommitmentConfig, PubsubClient, RpcClient},
+    event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -176,13 +176,12 @@ impl AppState {
         }
     }
 
-    pub(crate) async fn sync_market_data_on_user_changes(
+    pub(crate) async fn sync_market_subscriptions_on_user_changes(
         &self,
         configured_markets: &[MarketId],
     ) -> Result<(), SdkError> {
         let default_sub_account = self.default_sub_account();
         let state_commitment = self.tx_commitment;
-        let endpoint = self.client.rpc().url();
         let configured_markets_vec = configured_markets.to_vec();
         let self_clone = self.clone();
         let mut current_user_markets_to_subscribe = self.get_marketids_to_subscribe().await?;
@@ -195,14 +194,7 @@ impl AppState {
                 min_context_slot: None,
             };
 
-            let pubsub_client =
-                match PubsubClient::new(endpoint.replace("https", "wss").as_str()).await {
-                    Ok(client) => client,
-                    Err(err) => {
-                        warn!(target: LOG_TARGET, "failed to create pubsub client: {err:?}");
-                        return;
-                    }
-                };
+            let pubsub_client = self_clone.client.ws();
 
             let (mut account_subscription, unsubscribe_fn) = match pubsub_client
                 .account_subscribe(&default_sub_account, Some(pubsub_config))
@@ -229,7 +221,7 @@ impl AppState {
                             {
                                 warn!(target: LOG_TARGET, "error refreshing market subscriptions: {err:?}");
                             } else {
-                                info!(target: LOG_TARGET, "market subscriptions refreshed due to updated position/order state");
+                                debug!(target: LOG_TARGET, "market subscriptions refreshed due to updated position/order state");
                             }
                         }
 
@@ -242,6 +234,7 @@ impl AppState {
             }
 
             unsubscribe_fn().await;
+            warn!(target: LOG_TARGET, "market subscriptions no longer synced with user account changes");
         });
 
         Ok(())

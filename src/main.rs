@@ -281,10 +281,10 @@ async fn main() -> std::io::Result<()> {
     info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
 
     state
-        .sync_market_data_on_user_changes(&markets)
+        .sync_market_subscriptions_on_user_changes(&markets)
         .await
-        .expect("failed to setup market data sync on user changes");
-    info!(target: LOG_TARGET, "subscribed to user account updates 🛜");
+        .expect("failed to setup market subscriptions sync on user changes");
+    info!(target: LOG_TARGET, "subscribed to user account updates to sync market subscriptions 🛜");
 
     info!(
         target: LOG_TARGET,
