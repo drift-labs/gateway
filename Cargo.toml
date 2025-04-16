@@ -13,6 +13,7 @@ log = "*"
 rust_decimal = "*"
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
+solana-account-decoder-client-types = "2.2.2"
 solana-rpc-client-api = "2"
 solana-sdk = "2"
 solana-transaction-status = "2"

@@ -274,8 +274,17 @@ async fn main() -> std::io::Result<()> {
     if let Some(ref user_markets) = config.markets {
         markets.extend(parse_markets(&state.client, user_markets).expect("valid markets"));
     };
-    state.subscribe_market_data(&markets).await;
+    state
+        .subscribe_market_data(&markets)
+        .await
+        .expect("failed to subscribe to market data updates");
     info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
+
+    state
+        .sync_market_subscriptions_on_user_changes(&markets)
+        .await
+        .expect("failed to setup market subscriptions sync on user changes");
+    info!(target: LOG_TARGET, "subscribed to user account updates to sync market subscriptions 🛜");
 
     info!(
         target: LOG_TARGET,
