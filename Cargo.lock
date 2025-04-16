@@ -1499,6 +1499,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "solana-account-decoder-client-types",
  "solana-rpc-client-api",
  "solana-sdk",
  "solana-transaction-status",
@@ -1510,7 +1511,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.2.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
+source = "git+https://github.com/drift-labs/drift-rs?rev=653fff5#653fff5a7e55705bccdbb1a0762da73c5348c1d3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1523,7 +1524,7 @@ dependencies = [
 [[package]]
 name = "drift-pubsub-client"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
+source = "git+https://github.com/drift-labs/drift-rs?rev=653fff5#653fff5a7e55705bccdbb1a0762da73c5348c1d3"
 dependencies = [
  "futures-util",
  "gjson",
@@ -1543,11 +1544,12 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0-alpha.14"
-source = "git+https://github.com/drift-labs/drift-rs?rev=4849fbc#4849fbc9b62e8f64aee26debb9b748e605d9fb26"
+source = "git+https://github.com/drift-labs/drift-rs?rev=653fff5#653fff5a7e55705bccdbb1a0762da73c5348c1d3"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
  "anchor-lang",
+ "arrayvec",
  "base64 0.22.1",
  "bytemuck",
  "dashmap",
