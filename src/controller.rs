@@ -782,7 +782,10 @@ impl AppState {
             Cow::Owned(account_data),
             self.wallet.is_delegated(),
         )
-        .set_max_initial_margin_ratio(margin_ratio.mantissa().unsigned_abs(), sub_account_id)
+        .set_max_initial_margin_ratio(
+            margin_ratio.mantissa().unsigned_abs() as u32,
+            sub_account_id,
+        )
         .build();
         self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
     }
