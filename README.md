@@ -29,6 +29,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`POST` Place Orders](#place-orders)
       - [`PATCH` Modify Orders](#modify-orders)
       - [`DELETE` Cancel Orders](#cancel-orders)
+      - [`POST` Swap](#swap-orders)
       - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
     - [Websocket API](#websocket-api)
       - [Subscribing](#subscribing)
@@ -105,6 +106,14 @@ drift-gateway --dev https://api.devnet.solana.com
 drift-gateway https://rpc-provider.example.com --markets sol-perp,sol,weth
 ```
 
+## gRPC mode
+Run gateway subscriptions with geyser gRPC updates
+```bash
+export GRPC_HOST="grpc.example.com"
+export GRPC_X_TOKEN="aabbccddeeff112233"
+drift-gateway https://rpc-provider.example.com --grpc
+```
+
 ## Usage
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
@@ -116,10 +125,13 @@ These runtime environment variables are required:
 | Variable            | Description                               | Example Value                |
 |---------------------|-------------------------------------------|------------------------------|
 | `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair | `</PATH/TO/KEY.json>` or `seedBase58` |
+| `GRPC_HOST` | endpoint for gRPC subscription mode | `https://grpc.example.com`
+| `GRPC_X_TOKEN` | authentication token for gRPC subscription mode | `aabbccddeeff112233`
 | `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
 
 ```bash
-Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
+./target/release/drift-gateway --help
+Usage: drift-gateway <rpc_host> [--markets <markets>] [--dev] [--host <host>] [--port <port>] [--ws-port <ws-port>] [--keep-alive-timeout <keep-alive-timeout>] [--delegate <delegate>] [--emulate <emulate>] [--tx-commitment <tx-commitment>] [--commitment <commitment>] [--default-sub-account-id <default-sub-account-id>] [--skip-tx-preflight] [--extra-rpcs <extra-rpcs>] [--verbose] [--grpc]
 
 Drift gateway server
 
@@ -147,9 +159,10 @@ Options:
                     default sub_account_id to use (default: 0)
   --skip-tx-preflight
                     skip tx preflight checks
-  --extra-rpc       extra solana RPC urls for improved Tx broadcast
+  --extra-rpcs      extra solana RPC urls for improved Tx broadcast
   --verbose         enable debug logging
-  --help            display usage information
+  --grpc            use gRPC mode for network subscriptions
+  --help, help      display usage information
 ```
 
 ### Delegated Signing Mode
@@ -678,6 +691,62 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
     }
 }'
 ```
+
+### Swap Orders
+
+Executes a spot token swap using Jupiter routing and liquidity aggregation.
+for more info see jup docs: https://dev.jup.ag/docs/api/swap-api/quote
+
+**Endpoint**: `POST /v2/swap`
+
+**Parameters**:
+
+Request body:
+```json
+{
+  "inputMarket": number,   // Input spot market index
+  "outputMarket": number,  // Output spot market index
+  "exactIn": boolean,      // true = exactIn, false, exactOut 
+  "amount": string,        // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
+  "slippage": number,      // Max slippage in bps
+  "useDirectRoutes": bool, // Direct Routes limits Jupiter routing to single hop routes only
+  "excludeDexes": bool,    // comma separated list of dexes to exclude
+}
+```
+dexes: https://lite-api.jup.ag/swap/v1/program-id-to-label
+
+**Response**:
+
+Success (200):
+```json
+{
+  "signature": string,   // Transaction signature
+  "success": boolean    // Whether the swap was successful
+}
+```
+
+Error (400/500):
+```json
+{
+  "code": number,       // Error code
+  "reason": string     // Error description
+}
+```
+
+**Example**:
+USDC to
+```bash
+curl -X POST "http://localhost:8080/v2/swap" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputMarket": 0,
+    "outputMarket": 1,
+    "exactIn": true,
+    "amount": "500.0",
+    "slippage": 10
+  }'
+```
+
 
 ## WebSocket API
 

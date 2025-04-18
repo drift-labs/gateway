@@ -10,6 +10,7 @@ use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
+    jupiter::{JupiterSwapApi, SwapMode},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -26,7 +27,10 @@ use drift_rs::{
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use futures_util::{stream::FuturesOrdered, stream::FuturesUnordered, StreamExt};
+use futures_util::{
+    stream::{FuturesOrdered, FuturesUnordered},
+    StreamExt,
+};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_account_decoder_client_types::UiAccountEncoding;
@@ -40,11 +44,12 @@ use thiserror::Error;
 
 use crate::{
     types::{
-        get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-        GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
-        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
-        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
-        UserCollateralResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, CancelAndPlaceRequest,
+        CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
+        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition,
+        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition, SwapRequest,
+        TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
+        UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -52,8 +57,8 @@ use crate::{
 
 /// Default TTL in seconds of gateway tx retry
 /// after which gateway will no longer resubmit or monitor the tx
-// ~10 slots
-const DEFAULT_TX_TTL: u16 = 4;
+// ~15 slots
+const DEFAULT_TX_TTL: u16 = 6;
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
 
@@ -253,7 +258,7 @@ impl AppState {
             .map(|s| MarketId::spot(s.market_index))
             .chain(all_perp.iter().map(|p| MarketId::perp(p.market_index)))
             .chain(open_orders.iter().map(|o| {
-                if (o.market_type == MarketType::Spot) {
+                if o.market_type == MarketType::Spot {
                     MarketId::spot(o.market_index)
                 } else {
                     MarketId::perp(o.market_index)
@@ -612,6 +617,68 @@ impl AppState {
         self.send_tx(tx, "modify_orders", ctx.ttl).await
     }
 
+    pub async fn swap(&self, ctx: Context, req: SwapRequest) -> GatewayResult<TxResponse> {
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+
+        let in_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.input_market)
+            .unwrap();
+        let out_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.output_market)
+            .unwrap();
+
+        let (swap_mode, amount) = if req.exact_in {
+            (
+                SwapMode::ExactIn,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(in_market.decimals)),
+            )
+        } else {
+            (
+                SwapMode::ExactOut,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(out_market.decimals)),
+            )
+        };
+
+        let (jupiter_swap_info, account_data) = tokio::try_join!(
+            self.client.jupiter_swap_query(
+                self.wallet.authority(),
+                amount,
+                swap_mode,
+                req.slippage_bps,
+                req.input_market,
+                req.output_market,
+                req.use_direct_routes,
+                req.exclude_dexes,
+                Default::default(),
+            ),
+            self.client.get_user_account(&sub_account)
+        )?;
+        let pf = self.get_priority_fee();
+
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Owned(account_data),
+            self.wallet.is_delegated(),
+        )
+        .jupiter_swap(
+            jupiter_swap_info,
+            in_market,
+            out_market,
+            &Wallet::derive_associated_token_address(self.wallet.authority(), in_market),
+            &Wallet::derive_associated_token_address(self.wallet.authority(), out_market),
+            None,
+            None,
+        )
+        .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
+        .build();
+        self.send_tx(tx, "swap", ctx.ttl).await
+    }
+
     pub async fn get_tx_events_for_subaccount_id(
         &self,
         ctx: Context,
@@ -715,7 +782,10 @@ impl AppState {
             Cow::Owned(account_data),
             self.wallet.is_delegated(),
         )
-        .set_max_initial_margin_ratio(margin_ratio.mantissa().abs() as u32, sub_account_id)
+        .set_max_initial_margin_ratio(
+            margin_ratio.mantissa().unsigned_abs() as u32,
+            sub_account_id,
+        )
         .build();
         self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
     }
@@ -787,7 +857,7 @@ impl AppState {
                     }
                 }
 
-                tokio::time::sleep(Duration::from_millis(400)).await;
+                tokio::time::sleep(Duration::from_millis(800)).await;
 
                 if let Ok(Some(Ok(()))) = primary_rpc.get_signature_status(&tx_signature).await {
                     confirmed = true;

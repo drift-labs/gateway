@@ -166,6 +166,18 @@ impl From<sdk_types::PerpPosition> for PerpPosition {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct SwapRequest {
+    pub amount: Decimal,
+    pub exact_in: bool,
+    pub input_market: u16,
+    pub output_market: u16,
+    pub slippage_bps: u16,
+    pub use_direct_routes: Option<bool>,
+    pub exclude_dexes: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PerpPositionExtended {
     pub liquidation_price: Decimal,
     pub unrealized_pnl: Decimal,
@@ -294,7 +306,7 @@ where
 
 #[inline]
 /// Convert decimal to unsigned fixed-point representation with `target` precision
-fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
+pub fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
     ((x.mantissa().unsigned_abs() * target as u128) / 10_u128.pow(x.scale())) as u64
 }
 
