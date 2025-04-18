@@ -1582,12 +1582,12 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "actix-web",
  "argh",
  "drift-rs",
- "env_logger 0.11.7",
+ "env_logger 0.9.3",
  "futures-util",
  "log",
  "rust_decimal",
@@ -1597,7 +1597,7 @@ dependencies = [
  "solana-rpc-client-api",
  "solana-sdk",
  "solana-transaction-status",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",
 ]
