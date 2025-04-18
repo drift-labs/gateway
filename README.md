@@ -130,7 +130,8 @@ These runtime environment variables are required:
 | `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
 
 ```bash
-Usage: drift-gateway <rpc_host> [--dev] [--host <host>] [--port <port>] [--delegate <delegate>] [--emulate <emulate>]
+./target/release/drift-gateway --help
+Usage: drift-gateway <rpc_host> [--markets <markets>] [--dev] [--host <host>] [--port <port>] [--ws-port <ws-port>] [--keep-alive-timeout <keep-alive-timeout>] [--delegate <delegate>] [--emulate <emulate>] [--tx-commitment <tx-commitment>] [--commitment <commitment>] [--default-sub-account-id <default-sub-account-id>] [--skip-tx-preflight] [--extra-rpcs <extra-rpcs>] [--verbose] [--grpc]
 
 Drift gateway server
 
@@ -158,9 +159,10 @@ Options:
                     default sub_account_id to use (default: 0)
   --skip-tx-preflight
                     skip tx preflight checks
-  --extra-rpc       extra solana RPC urls for improved Tx broadcast
+  --extra-rpcs      extra solana RPC urls for improved Tx broadcast
   --verbose         enable debug logging
-  --help            display usage information
+  --grpc            use gRPC mode for network subscriptions
+  --help, help      display usage information
 ```
 
 ### Delegated Signing Mode
