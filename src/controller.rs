@@ -44,12 +44,12 @@ use thiserror::Error;
 
 use crate::{
     types::{
-        get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
-        GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
-        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
-        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, SwapRequest, TxEventsResponse,
-        TxResponse, UserCollateralResponse, UserLeverageResponse, UserMarginResponse,
-        PRICE_DECIMALS,
+        get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, CancelAndPlaceRequest,
+        CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
+        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition,
+        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition, SwapRequest,
+        TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
+        UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -57,8 +57,8 @@ use crate::{
 
 /// Default TTL in seconds of gateway tx retry
 /// after which gateway will no longer resubmit or monitor the tx
-// ~10 slots
-const DEFAULT_TX_TTL: u16 = 4;
+// ~15 slots
+const DEFAULT_TX_TTL: u16 = 6;
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
 
@@ -631,16 +631,22 @@ impl AppState {
             .spot_market_config_by_index(req.output_market)
             .unwrap();
 
-        let swap_mode = if req.exact_in {
-            SwapMode::ExactIn
+        let (swap_mode, amount) = if req.exact_in {
+            (
+                SwapMode::ExactIn,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(in_market.decimals)),
+            )
         } else {
-            SwapMode::ExactOut
+            (
+                SwapMode::ExactOut,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(out_market.decimals)),
+            )
         };
 
         let (jupiter_swap_info, account_data) = tokio::try_join!(
             self.client.jupiter_swap_query(
                 self.wallet.authority(),
-                req.amount.mantissa().try_into().unwrap(),
+                amount,
                 swap_mode,
                 req.slippage_bps,
                 req.input_market,
@@ -661,8 +667,8 @@ impl AppState {
         )
         .jupiter_swap(
             jupiter_swap_info,
-            &in_market,
-            &out_market,
+            in_market,
+            out_market,
             &Wallet::derive_associated_token_address(self.wallet.authority(), in_market),
             &Wallet::derive_associated_token_address(self.wallet.authority(), out_market),
             None,
@@ -776,7 +782,7 @@ impl AppState {
             Cow::Owned(account_data),
             self.wallet.is_delegated(),
         )
-        .set_max_initial_margin_ratio(margin_ratio.mantissa().abs() as u32, sub_account_id)
+        .set_max_initial_margin_ratio(margin_ratio.mantissa().unsigned_abs(), sub_account_id)
         .build();
         self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
     }
@@ -848,7 +854,7 @@ impl AppState {
                     }
                 }
 
-                tokio::time::sleep(Duration::from_millis(400)).await;
+                tokio::time::sleep(Duration::from_millis(800)).await;
 
                 if let Ok(Some(Ok(()))) = primary_rpc.get_signature_status(&tx_signature).await {
                     confirmed = true;

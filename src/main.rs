@@ -287,7 +287,7 @@ async fn main() -> std::io::Result<()> {
 
     if config.grpc {
         log::info!(target: LOG_TARGET, "gRPC mode enabled ⚡️");
-        let _ = state
+        state
             .client
             .grpc_subscribe(
                 std::env::var("GRPC_ENDPOINT").expect("GRPC_ENDPOINT set"),

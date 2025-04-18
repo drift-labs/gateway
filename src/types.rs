@@ -306,7 +306,7 @@ where
 
 #[inline]
 /// Convert decimal to unsigned fixed-point representation with `target` precision
-fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
+pub fn scale_decimal_to_u64(x: Decimal, target: u32) -> u64 {
     ((x.mantissa().unsigned_abs() * target as u128) / 10_u128.pow(x.scale())) as u64
 }
 
