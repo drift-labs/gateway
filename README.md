@@ -692,7 +692,8 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 
 ### Swap Orders
 
-Executes a spot token swap using Jupiter.
+Executes a spot token swap using Jupiter routing and liquidity aggregation.
+for more info see jup docs: https://dev.jup.ag/docs/api/swap-api/quote
 
 **Endpoint**: `POST /v2/swap`
 
@@ -701,13 +702,16 @@ Executes a spot token swap using Jupiter.
 Request body:
 ```json
 {
-  "inToken": number,     // Input spot market index
-  "outToken": number,    // Output spot maret index
-  "exactIn": boolean,    // true = exactIn, false, exactOut 
-  "amount": string,      // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
-  "slippage": number     // Max slippage in bps
+  "inputMarket": number,   // Input spot market index
+  "outputMarket": number,  // Output spot market index
+  "exactIn": boolean,      // true = exactIn, false, exactOut 
+  "amount": string,        // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
+  "slippage": number,      // Max slippage in bps
+  "useDirectRoutes": bool, // Direct Routes limits Jupiter routing to single hop routes only
+  "excludeDexes": bool,    // comma separated list of dexes to exclude
 }
 ```
+dexes: https://lite-api.jup.ag/swap/v1/program-id-to-label
 
 **Response**:
 
@@ -733,8 +737,8 @@ USDC to
 curl -X POST "http://localhost:8080/v2/swap" \
   -H "Content-Type: application/json" \
   -d '{
-    "inToken": 0,
-    "outToken": 1,
+    "inputMarket": 0,
+    "outputMarket": 1,
     "exactIn": true,
     "amount": "500.0",
     "slippage": 10
