@@ -10,11 +10,11 @@ use actix_web::{
 use argh::FromArgs;
 use drift_rs::{
     types::{CommitmentConfig, MarginRequirementType, MarketId},
-    Pubkey,
+    GrpcSubscribeOpts, Pubkey,
 };
 use log::{debug, info, warn};
 use serde_json::json;
-use types::SetLeverageRequest;
+use types::{SetLeverageRequest, SwapRequest};
 
 use crate::{
     controller::{create_wallet, AppState, ControllerError},
@@ -225,6 +225,21 @@ async fn get_collateral(
     )
 }
 
+#[post("/swap")]
+async fn swap(
+    controller: web::Data<AppState>,
+    body: web::Bytes,
+    ctx: web::Query<Context>,
+) -> impl Responder {
+    match serde_json::from_slice::<'_, SwapRequest>(body.as_ref()) {
+        Ok(req) => {
+            debug!(target: LOG_TARGET, "request: {req:?}");
+            handle_result(controller.swap(ctx.0, req).await)
+        }
+        Err(err) => handle_deser_error(err),
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config: GatewayConfig = argh::from_env();
@@ -238,6 +253,7 @@ async fn main() -> std::io::Result<()> {
             .filter_module("wsaccsub", log::LevelFilter::Debug)
             .filter_module("marketmap", log::LevelFilter::Debug)
             .filter_module("oraclemap", log::LevelFilter::Debug)
+            .filter_module("grpc", log::LevelFilter::Info)
     } else {
         logger.filter_module(LOG_TARGET, log::LevelFilter::Info)
     }
@@ -269,22 +285,35 @@ async fn main() -> std::io::Result<()> {
     )
     .await;
 
-    // start market+oracle subs
-    let mut markets = Vec::<MarketId>::default();
-    if let Some(ref user_markets) = config.markets {
-        markets.extend(parse_markets(&state.client, user_markets).expect("valid markets"));
-    };
-    state
-        .subscribe_market_data(&markets)
-        .await
-        .expect("failed to subscribe to market data updates");
-    info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
+    if config.grpc {
+        log::info!(target: LOG_TARGET, "gRPC mode enabled ⚡️");
+        let _ = state
+            .client
+            .grpc_subscribe(
+                std::env::var("GRPC_ENDPOINT").expect("GRPC_ENDPOINT set"),
+                std::env::var("GRPC_X_TOKEN").expect("GRPC_X_TOKEN set"),
+                GrpcSubscribeOpts::default(),
+            )
+            .await
+            .expect("gRPC subscribed");
+    } else {
+        // start market+oracle subs
+        let mut markets = Vec::<MarketId>::default();
+        if let Some(ref user_markets) = config.markets {
+            markets.extend(parse_markets(&state.client, user_markets).expect("valid markets"));
+        };
+        state
+            .subscribe_market_data(&markets)
+            .await
+            .expect("failed to subscribe to market data updates");
+        info!(target: LOG_TARGET, "subscribed to market data updates 🛜");
 
-    state
-        .sync_market_subscriptions_on_user_changes(&markets)
-        .await
-        .expect("failed to setup market subscriptions sync on user changes");
-    info!(target: LOG_TARGET, "subscribed to user account updates to sync market subscriptions 🛜");
+        state
+            .sync_market_subscriptions_on_user_changes(&markets)
+            .await
+            .expect("failed to setup market subscriptions sync on user changes");
+        info!(target: LOG_TARGET, "subscribed to user account updates to sync market subscriptions 🛜");
+    }
 
     info!(
         target: LOG_TARGET,
@@ -358,7 +387,8 @@ async fn main() -> std::io::Result<()> {
                     .service(get_margin_info)
                     .service(get_leverage)
                     .service(set_leverage)
-                    .service(get_collateral),
+                    .service(get_collateral)
+                    .service(swap),
             )
     })
     .keep_alive(Duration::from_secs(config.keep_alive_timeout as u64))
@@ -469,6 +499,9 @@ struct GatewayConfig {
     /// enable debug logging
     #[argh(switch)]
     verbose: bool,
+    /// use gRPC mode for network subscriptions
+    #[argh(switch)]
+    grpc: bool,
 }
 
 /// Parse raw markets list from user command

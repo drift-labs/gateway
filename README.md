@@ -29,6 +29,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`POST` Place Orders](#place-orders)
       - [`PATCH` Modify Orders](#modify-orders)
       - [`DELETE` Cancel Orders](#cancel-orders)
+      - [`POST` Swap](#swap-orders)
       - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
     - [Websocket API](#websocket-api)
       - [Subscribing](#subscribing)
@@ -105,6 +106,14 @@ drift-gateway --dev https://api.devnet.solana.com
 drift-gateway https://rpc-provider.example.com --markets sol-perp,sol,weth
 ```
 
+## gRPC mode
+Run gateway subscriptions with geyser gRPC updates
+```bash
+export GRPC_HOST="grpc.example.com"
+export GRPC_X_TOKEN="aabbccddeeff112233"
+drift-gateway https://rpc-provider.example.com --grpc
+```
+
 ## Usage
 
 ⚠️ Before starting, ensure a Drift _user_ account is initialized e.g. via the drift app at https://beta.drift.trade (devnet) or https://app.drift.trade
@@ -116,6 +125,8 @@ These runtime environment variables are required:
 | Variable            | Description                               | Example Value                |
 |---------------------|-------------------------------------------|------------------------------|
 | `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair | `</PATH/TO/KEY.json>` or `seedBase58` |
+| `GRPC_HOST` | endpoint for gRPC subscription mode | `https://grpc.example.com`
+| `GRPC_X_TOKEN` | authentication token for gRPC subscription mode | `aabbccddeeff112233`
 | `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
 
 ```bash
@@ -678,6 +689,58 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
     }
 }'
 ```
+
+### Swap Orders
+
+Executes a spot token swap using Jupiter.
+
+**Endpoint**: `POST /v2/swap`
+
+**Parameters**:
+
+Request body:
+```json
+{
+  "inToken": number,     // Input spot market index
+  "outToken": number,    // Output spot maret index
+  "exactIn": boolean,    // true = exactIn, false, exactOut 
+  "amount": string,      // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
+  "slippage": number     // Max slippage in bps
+}
+```
+
+**Response**:
+
+Success (200):
+```json
+{
+  "signature": string,   // Transaction signature
+  "success": boolean    // Whether the swap was successful
+}
+```
+
+Error (400/500):
+```json
+{
+  "code": number,       // Error code
+  "reason": string     // Error description
+}
+```
+
+**Example**:
+USDC to
+```bash
+curl -X POST "http://localhost:8080/v2/swap" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inToken": 0,
+    "outToken": 1,
+    "exactIn": true,
+    "amount": "500.0",
+    "slippage": 10
+  }'
+```
+
 
 ## WebSocket API
 

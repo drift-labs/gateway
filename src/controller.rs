@@ -10,6 +10,7 @@ use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
+    jupiter::{JupiterSwapApi, SwapMode},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -26,7 +27,10 @@ use drift_rs::{
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use futures_util::{stream::FuturesOrdered, stream::FuturesUnordered, StreamExt};
+use futures_util::{
+    stream::{FuturesOrdered, FuturesUnordered},
+    StreamExt,
+};
 use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use solana_account_decoder_client_types::UiAccountEncoding;
@@ -43,8 +47,9 @@ use crate::{
         get_market_decimals, AllMarketsResponse, CancelAndPlaceRequest, CancelOrdersRequest,
         GetOrdersRequest, GetOrdersResponse, GetPositionsRequest, GetPositionsResponse, Market,
         MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
-        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, TxEventsResponse, TxResponse,
-        UserCollateralResponse, UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        PlaceOrdersRequest, SolBalanceResponse, SpotPosition, SwapRequest, TxEventsResponse,
+        TxResponse, UserCollateralResponse, UserLeverageResponse, UserMarginResponse,
+        PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -253,7 +258,7 @@ impl AppState {
             .map(|s| MarketId::spot(s.market_index))
             .chain(all_perp.iter().map(|p| MarketId::perp(p.market_index)))
             .chain(open_orders.iter().map(|o| {
-                if (o.market_type == MarketType::Spot) {
+                if o.market_type == MarketType::Spot {
                     MarketId::spot(o.market_index)
                 } else {
                     MarketId::perp(o.market_index)
@@ -610,6 +615,62 @@ impl AppState {
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         self.send_tx(tx, "modify_orders", ctx.ttl).await
+    }
+
+    pub async fn swap(&self, ctx: Context, req: SwapRequest) -> GatewayResult<TxResponse> {
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+
+        let in_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.input_market)
+            .unwrap();
+        let out_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.output_market)
+            .unwrap();
+
+        let swap_mode = if req.exact_in {
+            SwapMode::ExactIn
+        } else {
+            SwapMode::ExactOut
+        };
+
+        let (jupiter_swap_info, account_data) = tokio::try_join!(
+            self.client.jupiter_swap_query(
+                self.wallet.authority(),
+                req.amount.mantissa().try_into().unwrap(),
+                swap_mode,
+                req.slippage_bps,
+                req.input_market,
+                req.output_market,
+                req.use_direct_routes,
+                req.exclude_dexes,
+                Default::default(),
+            ),
+            self.client.get_user_account(&sub_account)
+        )?;
+        let pf = self.get_priority_fee();
+
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Owned(account_data),
+            self.wallet.is_delegated(),
+        )
+        .jupiter_swap(
+            jupiter_swap_info,
+            &in_market,
+            &out_market,
+            &Wallet::derive_associated_token_address(self.wallet.authority(), in_market),
+            &Wallet::derive_associated_token_address(self.wallet.authority(), out_market),
+            None,
+            None,
+        )
+        .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
+        .build();
+        self.send_tx(tx, "swap", ctx.ttl).await
     }
 
     pub async fn get_tx_events_for_subaccount_id(
