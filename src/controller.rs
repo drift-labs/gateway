@@ -44,12 +44,12 @@ use thiserror::Error;
 
 use crate::{
     types::{
-        get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, CancelAndPlaceRequest,
-        CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse, GetPositionsRequest,
-        GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition,
-        PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse, SpotPosition, SwapRequest,
-        TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
-        UserMarginResponse, PRICE_DECIMALS,
+        get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, AuthorityResponse,
+        CancelAndPlaceRequest, CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse,
+        GetPositionsRequest, GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest,
+        Order, PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse,
+        SpotPosition, SwapRequest, TxEventsResponse, TxResponse, UserCollateralResponse,
+        UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -298,15 +298,23 @@ impl AppState {
 
     /// Return SOL balance of the tx signing account
     pub async fn get_sol_balance(&self) -> GatewayResult<SolBalanceResponse> {
+        let pubkey = self.authority();
         let balance = self
             .client
             .rpc()
-            .get_balance(&self.wallet.signer())
+            .get_balance(pubkey)
             .await
             .map_err(|err| ControllerError::Sdk(err.into()))?;
         Ok(SolBalanceResponse {
             balance: Decimal::new(balance as i64, BASE_PRECISION.ilog10()).normalize(),
+            pubkey: pubkey.to_string(),
         })
+    }
+
+    /// Return Pubkey of Authority (signer)
+    pub fn get_authority(&self) -> GatewayResult<AuthorityResponse> {
+        let pubkey = self.wallet.authority().to_string();
+        Ok(AuthorityResponse { pubkey })
     }
 
     /// Cancel orders

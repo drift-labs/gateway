@@ -557,6 +557,12 @@ pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) ->
 #[derive(Serialize, Debug)]
 pub struct SolBalanceResponse {
     pub balance: Decimal,
+    pub pubkey: String,
+}
+
+#[derive(Serialize, Debug)]
+pub struct AuthorityResponse {
+    pub pubkey: String,
 }
 
 #[derive(Serialize, Debug)]
