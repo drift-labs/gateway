@@ -554,15 +554,15 @@ mod tests {
             Some(delegated_seed),
             None,
             Some(
-                "GiMXQkJXLVjScmQDkoLJShBJpTh9SDPvT2AZQq8NyEBf"
+                "DxoRJ4f5XRMvXU9SGuM4ZziBFUxbhB3ubur5sVZEvue2"
                     .try_into()
                     .unwrap(),
             ),
         );
 
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
-            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await;
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
 
         let app = test::init_service(
             App::new()
