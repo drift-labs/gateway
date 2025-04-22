@@ -743,7 +743,7 @@ curl -X POST "http://localhost:8080/v2/swap" \
     "outputMarket": 1,
     "exactIn": true,
     "amount": "500.0",
-    "slippage": 10
+    "slippageBps": 10
   }'
 ```
 
