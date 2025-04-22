@@ -277,12 +277,19 @@ async fn main() -> std::io::Result<()> {
     let tx_commitment = CommitmentConfig::from_str(&config.tx_commitment)
         .expect("one of: processed | confirmed | finalized");
     let extra_rpcs = config.extra_rpcs.as_ref();
+
+    let sub_account_ids = if config.active_sub_accounts.is_empty() {
+        vec![config.default_sub_account_id]
+    } else {
+        config.active_sub_accounts
+    };
+
     let state = AppState::new(
         &config.rpc_host,
         config.dev,
         wallet,
         Some((state_commitment, tx_commitment)),
-        Some(config.default_sub_account_id),
+        sub_account_ids,
         config.skip_tx_preflight,
         extra_rpcs
             .map(|s| s.split(",").collect())
@@ -500,6 +507,9 @@ struct GatewayConfig {
     /// default sub_account_id to use (default: 0)
     #[argh(option, default = "0")]
     default_sub_account_id: u16,
+    /// list of active sub_account_ids to use (default: 0)
+    #[argh(option)]
+    active_sub_accounts: Vec<u16>,
     /// skip tx preflight checks
     #[argh(switch)]
     skip_tx_preflight: bool,

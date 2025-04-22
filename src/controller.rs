@@ -91,7 +91,7 @@ pub struct AppState {
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
     /// default sub_account_id to use if not provided
-    default_subaccount_id: u16,
+    sub_account_ids: Vec<u16>,
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
     priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
@@ -111,12 +111,12 @@ impl AppState {
     pub fn signer(&self) -> Pubkey {
         self.wallet.signer()
     }
-    pub fn default_sub_account(&self) -> Pubkey {
-        self.wallet.sub_account(self.default_subaccount_id)
+    pub fn sub_account(&self, sub_account_id: u16) -> Pubkey {
+        self.wallet.sub_account(sub_account_id)
     }
     pub fn resolve_sub_account(&self, sub_account_id: Option<u16>) -> Pubkey {
         self.wallet
-            .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
+            .sub_account(sub_account_id.unwrap_or(self.sub_account_ids[0]))
     }
 
     /// Initialize Gateway Drift client
@@ -133,7 +133,7 @@ impl AppState {
         devnet: bool,
         wallet: Wallet,
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
-        default_subaccount_id: Option<u16>,
+        sub_account_ids: Vec<u16>,
         skip_tx_preflight: bool,
         extra_rpcs: Vec<&str>,
         swift_node: Option<String>,
@@ -151,11 +151,13 @@ impl AppState {
             .await
             .expect("ok");
 
-        let default_subaccount = wallet.sub_account(default_subaccount_id.unwrap_or(0));
-        if let Err(err) = client.subscribe_account(&default_subaccount).await {
-            log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}");
-        } else {
-            log::info!(target: LOG_TARGET, "subscribed to subaccount: {default_subaccount}");
+        for sub_account_id in sub_account_ids {
+            let sub_account = wallet.sub_account(sub_account_id);
+            if let Err(err) = client.subscribe_account(&sub_account).await {
+                log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}. subaccount: {sub_account_id}");
+            } else {
+                log::info!(target: LOG_TARGET, "subscribed to subaccount: {sub_account}");
+            }
         }
 
         let priority_fee_subscriber = PriorityFeeSubscriber::with_config(
@@ -190,7 +192,7 @@ impl AppState {
         Self {
             client: Arc::new(client),
             tx_commitment,
-            default_subaccount_id: default_subaccount_id.unwrap_or(0),
+            sub_account_ids: sub_account_ids_to_subscribe,
             skip_tx_preflight,
             priority_fee_subscriber,
             slot_subscriber: Arc::new(slot_subscriber),
