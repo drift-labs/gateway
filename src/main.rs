@@ -560,7 +560,7 @@ mod tests {
             ),
         );
 
-        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
         let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
 
@@ -598,7 +598,7 @@ mod tests {
             ),
         );
 
-        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
         let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
 
@@ -631,7 +631,7 @@ mod tests {
         let _ = env_logger::try_init();
         let wallet = create_wallet(Some(get_seed()), None, None);
 
-        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
         let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
 

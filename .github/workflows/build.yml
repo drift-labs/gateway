@@ -60,6 +60,8 @@ jobs:
           DRIFT_GATEWAY_KEY: ${{ secrets.DRIFT_GATEWAY_KEY }}
           TEST_DELEGATED_SIGNER: ${{ secrets.TEST_DELEGATED_SIGNER }}
           TEST_RPC_ENDPOINT: ${{ secrets.DEVNET_RPC_ENDPOINT }}
+          TEST_MAINNET_RPC_ENDPOINT: ${{ secrets.MAINNET_RPC_ENDPOINT }}
+
         # --test-threads, limit parallelism to prevent hitting RPC rate-limits
         run: |
           cargo -V
