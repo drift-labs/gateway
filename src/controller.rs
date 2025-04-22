@@ -22,7 +22,7 @@ use drift_rs::{
     priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
     types::{
         self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
-        RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
+        ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
     },
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
@@ -651,9 +651,10 @@ impl AppState {
             )
         };
 
+        let signer = self.wallet.signer();
         let (jupiter_swap_info, account_data) = tokio::try_join!(
             self.client.jupiter_swap_query(
-                self.wallet.authority(),
+                &signer,
                 amount,
                 swap_mode,
                 req.slippage_bps,
@@ -677,13 +678,14 @@ impl AppState {
             jupiter_swap_info,
             in_market,
             out_market,
-            &Wallet::derive_associated_token_address(self.wallet.authority(), in_market),
-            &Wallet::derive_associated_token_address(self.wallet.authority(), out_market),
+            &Wallet::derive_associated_token_address(&signer, in_market),
+            &Wallet::derive_associated_token_address(&signer, out_market),
             None,
             None,
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
         .build();
+
         self.send_tx(tx, "swap", ctx.ttl).await
     }
 
@@ -747,11 +749,12 @@ impl AppState {
                     }),
                     _ => {
                         let err: SdkError = err.into();
-                        if let Some(code) = err.to_anchor_error_code() {
+
+                        if let Some(program_error) = err.to_anchor_error_code() {
                             return Ok(TxEventsResponse::new(
                                 Default::default(),
                                 false,
-                                Some(format!("program error: {code}")),
+                                Some(format!("program error: {program_error}")),
                             ));
                         }
                         if err.to_out_of_sol_error().is_some() {
@@ -761,6 +764,7 @@ impl AppState {
                                 Some("ouf of sol, top-up account".into()),
                             ));
                         }
+
                         Ok(TxEventsResponse::new(
                             Default::default(),
                             false,
@@ -802,6 +806,27 @@ impl AppState {
         self.priority_fee_subscriber.priority_fee_nth(0.9)
     }
 
+    /// Test tx simulate only
+    #[cfg(test)]
+    async fn send_tx(
+        &self,
+        tx: VersionedMessage,
+        reason: &'static str,
+        _ttl: Option<u16>,
+    ) -> GatewayResult<TxResponse> {
+        match self.client.simulate_tx(tx).await?.err {
+            Some(err) => {
+                log::error!("test tx failed: {err:?}");
+                Err(ControllerError::TxFailed {
+                    reason: reason.into(),
+                    code: 0,
+                })
+            }
+            None => Ok(TxResponse::new("".into())),
+        }
+    }
+
+    #[cfg(not(test))]
     async fn send_tx(
         &self,
         tx: VersionedMessage,
@@ -883,10 +908,16 @@ impl AppState {
 }
 
 fn handle_tx_err(err: SdkError) -> ControllerError {
-    if let Some(code) = err.to_anchor_error_code() {
-        ControllerError::TxFailed {
-            reason: code.name(),
-            code: code.into(),
+    if let Some(program_err) = err.to_anchor_error_code() {
+        match program_err {
+            ProgramError::Drift(code) => ControllerError::TxFailed {
+                reason: code.name(),
+                code: code.into(),
+            },
+            ProgramError::Other { ix_idx, code } => ControllerError::TxFailed {
+                reason: format!("ix idx: {ix_idx}"),
+                code,
+            },
         }
     } else {
         ControllerError::Sdk(err)

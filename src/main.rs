@@ -560,15 +560,15 @@ mod tests {
             Some(delegated_seed),
             None,
             Some(
-                "GiMXQkJXLVjScmQDkoLJShBJpTh9SDPvT2AZQq8NyEBf"
+                "DxoRJ4f5XRMvXU9SGuM4ZziBFUxbhB3ubur5sVZEvue2"
                     .try_into()
                     .unwrap(),
             ),
         );
 
-        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
-            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await;
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
 
         let app = test::init_service(
             App::new()
@@ -581,6 +581,82 @@ mod tests {
         let req = test::TestRequest::default()
             .method(Method::DELETE)
             .uri("/orders")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        dbg!(resp.response().body());
+        assert!(resp.status().is_success());
+    }
+
+    // likely safe to ignore during development, mainly regression test for CI
+    #[actix_web::test]
+    async fn delegated_swap_works() {
+        let _ = env_logger::try_init();
+        let delegated_seed =
+            std::env::var("TEST_DELEGATED_SIGNER").expect("delegated signing key set");
+        let wallet = create_wallet(
+            Some(delegated_seed),
+            None,
+            Some(
+                "DxoRJ4f5XRMvXU9SGuM4ZziBFUxbhB3ubur5sVZEvue2"
+                    .try_into()
+                    .unwrap(),
+            ),
+        );
+
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
+
+        let app =
+            test::init_service(App::new().app_data(web::Data::new(state)).service(swap)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let payload = serde_json::json!({
+            "inputMarket": 0,
+            "outputMarket": 1,
+            "exactIn": true,
+            "amount": "5.0",
+            "slippageBps": 10
+        });
+
+        let req = test::TestRequest::default()
+            .set_payload(serde_json::to_vec(&payload).unwrap())
+            .method(Method::POST)
+            .uri("/swap")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        dbg!(resp.response().body());
+        assert!(resp.status().is_success());
+    }
+
+    // likely safe to ignore during development, mainly regression test for CI
+    #[actix_web::test]
+    async fn swap_works() {
+        let _ = env_logger::try_init();
+        let wallet = create_wallet(Some(get_seed()), None, None);
+
+        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
+
+        let app =
+            test::init_service(App::new().app_data(web::Data::new(state)).service(swap)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let payload = serde_json::json!({
+            "inputMarket": 0,
+            "outputMarket": 1,
+            "exactIn": false,
+            "amount": "0.1",
+            "slippageBps": 10
+        });
+
+        let req = test::TestRequest::default()
+            .set_payload(serde_json::to_vec(&payload).unwrap())
+            .method(Method::POST)
+            .uri("/swap")
             .to_request();
 
         let resp = test::call_service(&app, req).await;
