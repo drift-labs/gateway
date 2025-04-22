@@ -171,6 +171,11 @@ async fn get_sol_balance(controller: web::Data<AppState>) -> impl Responder {
     handle_result(controller.get_sol_balance().await)
 }
 
+#[get("/authority")]
+async fn get_authority(controller: web::Data<AppState>) -> impl Responder {
+    handle_result(controller.get_authority())
+}
+
 #[get("/transactionEvent/{tx_sig}")]
 async fn get_tx_events(
     controller: web::Data<AppState>,
@@ -381,6 +386,7 @@ async fn main() -> std::io::Result<()> {
                     .service(modify_orders)
                     .service(cancel_and_place_orders)
                     .service(get_sol_balance)
+                    .service(get_authority)
                     .service(get_positions_extended)
                     .service(get_tx_events)
                     .service(get_market_info)

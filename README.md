@@ -22,6 +22,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`GET` Perp Position Info](#get-position-info-perps-only)
       - [`GET` Transaction Events](#get-transaction-events)
       - [`GET` SOL Balance](#get-sol-balance)
+      - [`GET` Authority](#get-authority)
       - [`GET` Margin Info](#get-margin-info)
       - [`GET` Leverage](#get-leverage)
       - [`POST` Leverage](#set-leverage)
@@ -569,8 +570,19 @@ $ curl localhost:8080/v2/balance
 ```
 
 ```json
-{ "balance": "0.12" }
+{ "balance": "0.12", "pubkey": "key" }
 ```
+
+### Get Authority
+Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
+```bash
+$ curl localhost:8080/v2/authority
+```
+
+```json
+{ "pubkey": "key" }
+```
+
 
 ### Place Orders
 
