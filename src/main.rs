@@ -287,6 +287,7 @@ async fn main() -> std::io::Result<()> {
         extra_rpcs
             .map(|s| s.split(",").collect())
             .unwrap_or_default(),
+        config.swift_node,
     )
     .await;
 
@@ -464,6 +465,9 @@ struct GatewayConfig {
     /// gateway creates market subscriptions for responsive trading
     #[argh(option)]
     markets: Option<String>,
+    /// swift node url
+    #[argh(option)]
+    swift_node: Option<String>,
     /// run in devnet mode
     #[argh(switch)]
     dev: bool,
@@ -547,7 +551,7 @@ mod tests {
         };
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![]).await
+        AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![], None).await
     }
 
     // likely safe to ignore during development, mainly regression test for CI
@@ -568,7 +572,8 @@ mod tests {
 
         let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
+        let state =
+            AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![], None).await;
 
         let app = test::init_service(
             App::new()

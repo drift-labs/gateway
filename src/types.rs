@@ -8,15 +8,18 @@ use drift_rs::{
         constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
         liquidation::{CollateralInfo, MarginRequirementInfo},
     },
+    swift_order_subscriber::SignedOrderType,
     types::{
         self as sdk_types,
         accounts::{PerpMarket, SpotMarket},
         MarketPrecision, MarketType, ModifyOrderParams, OrderParams, OrderTriggerCondition,
-        PositionDirection, PostOnlyParam,
+        PositionDirection, PostOnlyParam, SignedMsgOrderParamsMessage,
     },
 };
+use nanoid::nanoid;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::convert::TryInto;
 
 use crate::websocket::AccountEvent;
 
@@ -244,12 +247,15 @@ impl ModifyOrder {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaceOrdersRequest {
     pub orders: Vec<PlaceOrder>,
+    #[serde(default)]
+    pub place_order_type: PlaceOrderType,
 }
 
 #[cfg_attr(test, derive(Default))]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaceOrder {
     #[serde(flatten)]
@@ -277,6 +283,41 @@ pub struct PlaceOrder {
     #[serde(default)]
     oracle_price_offset: Option<Decimal>,
     max_ts: Option<i64>,
+    #[serde(default)]
+    auction_duration: Option<u8>,
+    #[serde(default)]
+    auction_start_price: Option<i64>,
+    #[serde(default)]
+    auction_end_price: Option<i64>,
+}
+
+#[derive(Serialize, Debug)]
+pub enum PlaceOrderType {
+    Tx,
+    SignedMsg,
+}
+
+impl Default for PlaceOrderType {
+    fn default() -> Self {
+        Self::Tx
+    }
+}
+
+impl<'de> Deserialize<'de> for PlaceOrderType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "tx" => Ok(PlaceOrderType::Tx),
+            "signed_msg" => Ok(PlaceOrderType::SignedMsg),
+            _ => Err(serde::de::Error::custom(format!(
+                "unknown place order type: {}",
+                s
+            ))),
+        }
+    }
 }
 
 pub fn ser_market_type<S>(x: &MarketType, s: S) -> Result<S::Ok, S::Error>
@@ -326,6 +367,10 @@ impl PlaceOrder {
             0
         };
 
+        let oracle_price_offset = self
+            .oracle_price_offset
+            .map(|x| scale_decimal_to_i64(x, PRICE_PRECISION as u32) as i32);
+
         OrderParams {
             market_index: self.market.market_index,
             market_type: self.market.market_type,
@@ -344,16 +389,41 @@ impl PlaceOrder {
                 PostOnlyParam::None
             },
             user_order_id: self.user_order_id,
-            oracle_price_offset: self
-                .oracle_price_offset
-                .map(|x| scale_decimal_to_i64(x, PRICE_PRECISION as u32) as i32),
+            oracle_price_offset,
             max_ts: self.max_ts,
             trigger_price: self
                 .trigger_price
                 .map(|v| scale_decimal_to_u64(v, PRICE_PRECISION as u32)),
             trigger_condition: self.trigger_condition.unwrap_or_default(),
+            auction_duration: Some(self.auction_duration.unwrap_or(20)),
+            auction_start_price: self.auction_start_price,
+            auction_end_price: self.auction_end_price,
             ..Default::default()
         }
+    }
+
+    pub fn to_signed_order_hex(
+        self,
+        order_params: OrderParams,
+        slot: u64,
+        sub_account_id: u16,
+    ) -> Vec<u8> {
+        let order = SignedMsgOrderParamsMessage {
+            signed_msg_order_params: order_params,
+            slot,
+            uuid: nanoid!(8).as_bytes().try_into().unwrap(),
+            sub_account_id,
+            take_profit_order_params: None, // TODO: add take profit order params
+            stop_loss_order_params: None,   // TODO: add stop loss order params
+        };
+
+        let signed_order_type = SignedOrderType::Authority(order);
+
+        let borsh_encoding = signed_order_type.to_borsh();
+        let borsh_bytes = borsh_encoding.as_slice();
+        let mut hex_bytes = vec![0; borsh_bytes.len() * 2]; // 2 hex bytes per msg byte
+        let _ = faster_hex::hex_encode(borsh_bytes, &mut hex_bytes).expect("hexified");
+        hex_bytes.as_slice().to_owned()
     }
 }
 
@@ -534,6 +604,24 @@ impl TxEventsResponse {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignedMsgResponse {
+    pub signed_msg_order_results: Vec<SignedMsgOrderResult>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignedMsgOrderResult {
+    pub hash: String,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum PlaceOrderResponse {
+    Tx(TxResponse),
+    SignedMsg(SignedMsgResponse),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CancelAndPlaceRequest {
     pub cancel: CancelOrdersRequest,
@@ -608,6 +696,16 @@ impl From<CollateralInfo> for UserCollateralResponse {
             free: Decimal::from_i128_with_scale(value.free, QUOTE_DECIMALS).normalize(),
         }
     }
+}
+
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+pub struct IncomingSignedMessage {
+    pub taker_authority: String,
+    pub signature: String,
+    pub message: String,
+    pub signing_authority: String,
+    pub market_type: String,
+    pub market_index: u16,
 }
 
 #[cfg(test)]
