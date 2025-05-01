@@ -183,7 +183,7 @@ impl AppState {
         let mut slot_subscriber = SlotSubscriber::new(client.ws());
         slot_subscriber
             .subscribe(|new_slot| {
-                debug!(target: LOG_TARGET, "app_state slot_updated: {:#?}", new_slot);
+                trace!(target: LOG_TARGET, "app_state slot_updated: {:#?}", new_slot);
             })
             .expect("slot subscribed");
         Self {
@@ -632,8 +632,8 @@ impl AppState {
                 }
             }
             PlaceOrderType::SignedMsg => {
-                let mut signed_messages = Vec::new();
-                let mut hashes: Vec<String> = Vec::new();
+                let mut signed_messages = Vec::with_capacity(req.orders.len());
+                let mut hashes: Vec<String> = Vec::with_capacity(req.orders.len());
                 let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
                 let current_slot = self.slot_subscriber.current_slot();
                 let orders_with_hex: Vec<(OrderParams, Vec<u8>)> = orders_iter
@@ -654,7 +654,6 @@ impl AppState {
                     .collect();
 
                 for (order, message) in orders_with_hex {
-                    // TODO: generate uuid
                     let signature = self.wallet.sign_message(message.as_slice())?; // TODO: generate signature
                     let market_type = match order.market_type {
                         MarketType::Spot => "spot".to_string(),
@@ -670,7 +669,7 @@ impl AppState {
                     };
 
                     signed_messages.push(incoming_msg);
-                    let hash = digest(signature.to_string().as_bytes());
+                    let hash = digest(signature.as_bytes());
                     hashes.push(hash);
                 }
 
@@ -684,29 +683,40 @@ impl AppState {
 
                 let mut responses: Vec<(String, String)> = Vec::new();
 
+                let mut futures = FuturesOrdered::new();
                 for msg in signed_messages {
-                    let response = client
-                        .post(&swift_orders_url)
-                        .json(&msg)
-                        .send()
-                        .await
-                        .map_err(|e| {
-                            ControllerError::BadRequest(format!("HTTP request failed: {}", e))
-                        })?;
-
-                    let status = response.status();
-                    let response_text = response.text().await.unwrap_or_default();
-                    responses.push((status.to_string(), response_text));
+                    let future =
+                        client
+                            .post(&swift_orders_url)
+                            .json(&msg)
+                            .send()
+                            .map(|resp| async move {
+                                match resp {
+                                    Ok(response) => {
+                                        let status = response.status();
+                                        let response_text =
+                                            response.text().await.unwrap_or_default();
+                                        Ok((status.to_string(), response_text))
+                                    }
+                                    Err(e) => Err(ControllerError::BadRequest(format!(
+                                        "HTTP request failed: {}",
+                                        e
+                                    ))),
+                                }
+                            });
+                    futures.push_back(future);
                 }
+
+                let responses = futures.collect::<Vec<(String, String)>>().await;
 
                 let signed_msg = SignedMsgResponse {
                     signed_msg_order_results: hashes
                         .iter()
-                        .enumerate()
-                        .map(|(i, hash)| SignedMsgOrderResult {
+                        .zip(responses)
+                        .map(|(hash, (status, response))| SignedMsgOrderResult {
                             hash: hash.clone(),
-                            status: responses[i].0.clone(),
-                            error: Some(responses[i].1.clone()),
+                            status: status.clone(),
+                            error: Some(response.clone()),
                         })
                         .collect(),
                 };
