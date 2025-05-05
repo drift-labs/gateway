@@ -212,6 +212,7 @@ pub(crate) enum Channel {
     Fills,
     Orders,
     Funding,
+    Swap,
 }
 
 #[derive(Deserialize, Debug)]
@@ -293,6 +294,16 @@ pub(crate) enum AccountEvent {
         ts: u64,
         signature: String,
         tx_idx: usize,
+    },
+    #[serde(rename_all = "camelCase")]
+    Swap {
+        amount_in: Decimal,
+        amount_out: Decimal,
+        market_in: u16,
+        market_out: u16,
+        ts: u64,
+        tx_idx: usize,
+        signature: String,
     },
 }
 
@@ -582,7 +593,7 @@ pub(crate) fn map_drift_event_for_account(
                 Some(AccountEvent::OrderCancel {
                     order_id: *order_id,
                     ts: *ts,
-                    signature: signature.to_string(),
+                    signature: signature.clone(),
                     tx_idx: *tx_idx,
                 }),
             )
@@ -596,7 +607,7 @@ pub(crate) fn map_drift_event_for_account(
             Some(AccountEvent::OrderCancelMissing {
                 user_order_id: *user_order_id,
                 order_id: *order_id,
-                signature: signature.to_string(),
+                signature: signature.clone(),
             }),
         ),
         DriftEvent::OrderExpire {
@@ -630,7 +641,7 @@ pub(crate) fn map_drift_event_for_account(
                 Some(AccountEvent::OrderCreate {
                     order: OrderWithDecimals::from_order(*order, decimals),
                     ts: *ts,
-                    signature: signature.to_string(),
+                    signature: signature.clone(),
                     tx_idx: *tx_idx,
                 }),
             )
@@ -648,9 +659,35 @@ pub(crate) fn map_drift_event_for_account(
                 amount: Decimal::new(*amount, PRICE_DECIMALS).normalize(),
                 market_index: *market_index,
                 ts: *ts,
-                signature: signature.to_string(),
+                signature: signature.clone(),
                 tx_idx: *tx_idx,
             }),
         ),
+        DriftEvent::Swap {
+            user,
+            amount_in,
+            amount_out,
+            market_in,
+            market_out,
+            fee,
+            ts,
+            signature,
+            tx_idx,
+        } => {
+            let decimals_in = get_market_decimals(program_data, Market::spot(*market_in));
+            let decimals_out = get_market_decimals(program_data, Market::spot(*market_out));
+            (
+                Channel::Swap,
+                Some(AccountEvent::Swap {
+                    amount_in: Decimal::new(*amount_in as i64, decimals_in),
+                    amount_out: Decimal::new(*amount_out as i64, decimals_out),
+                    market_in: *market_in,
+                    market_out: *market_out,
+                    ts: *ts,
+                    tx_idx: *tx_idx,
+                    signature: signature.clone(),
+                }),
+            )
+        }
     }
 }

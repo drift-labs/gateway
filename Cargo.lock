@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "drift-gateway"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "actix-web",
  "argh",
@@ -1605,7 +1605,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.2.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=975d81f#975d81f7f6ec693cca0211a2045f0fa1296d4a03"
+source = "git+https://github.com/drift-labs/drift-rs?rev=6d2d6e0#6d2d6e077c9dd23365da6e90d0d2ad920992eb1a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1618,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "drift-pubsub-client"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=975d81f#975d81f7f6ec693cca0211a2045f0fa1296d4a03"
+source = "git+https://github.com/drift-labs/drift-rs?rev=6d2d6e0#6d2d6e077c9dd23365da6e90d0d2ad920992eb1a"
 dependencies = [
  "futures-util",
  "gjson",
@@ -1638,7 +1638,7 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0-alpha.15"
-source = "git+https://github.com/drift-labs/drift-rs?rev=975d81f#975d81f7f6ec693cca0211a2045f0fa1296d4a03"
+source = "git+https://github.com/drift-labs/drift-rs?rev=6d2d6e0#6d2d6e077c9dd23365da6e90d0d2ad920992eb1a"
 dependencies = [
  "abi_stable",
  "ahash 0.8.11",
@@ -7489,8 +7489,7 @@ dependencies = [
 [[package]]
 name = "yellowstone-grpc-client"
 version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7504e16bd8edc6af4ba11be0b42fba24ffb42b383b1373c5d26dc644a327070a"
+source = "git+https://github.com/rpcpool/yellowstone-grpc?rev=bb3a44a#bb3a44a2f723fb1885eb70a1d1efcab44e8ac32f"
 dependencies = [
  "bytes",
  "futures",
@@ -7503,8 +7502,7 @@ dependencies = [
 [[package]]
 name = "yellowstone-grpc-proto"
 version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a19211525073ab3811f57f30056633011f836fd61781a1f3b24ed4404a4c214"
+source = "git+https://github.com/rpcpool/yellowstone-grpc?rev=bb3a44a#bb3a44a2f723fb1885eb70a1d1efcab44e8ac32f"
 dependencies = [
  "anyhow",
  "bincode",
