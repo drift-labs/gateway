@@ -746,7 +746,7 @@ Error (400/500):
 ```
 
 **Example**:
-USDC to
+USDC to SOL
 ```bash
 curl -X POST "http://localhost:8080/v2/swap" \
   -H "Content-Type: application/json" \
@@ -930,6 +930,32 @@ settled funding payment event for open perp positions
     }
   },
   "channel": "funding",
+  "subAccountId": 0
+}
+```
+
+**jupiter swap**
+denotes a subaccount swapped some amount of token (in) for another token (out)
+
+- `amountIn`: token amount sent at swap start
+- `marketIn`: market index of token sent
+- `amountOut`: token amount received at swap end
+- `marketOut`: market index of token received
+
+```json
+{
+  "data": {
+    "swap": {
+      "amountIn": "2.000000",
+      "amountOut": "0.013732454",
+      "marketIn": 0,
+      "marketOut": 1,
+      "ts": 1746418907,
+      "txIdx": 104,
+      "signature": "2mwW6gbPNWzgUWqVCJKCM55HWCTDG5iZUwjU1wVLdKgBzQz7yQj4ZsePQEpsECdcXJ1mJCGVHEvzCVf9mbhHnN7u"
+    }
+  },
+  "channel": "swap",
   "subAccountId": 0
 }
 ```
