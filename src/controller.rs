@@ -22,7 +22,7 @@ use drift_rs::{
     priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
     slot_subscriber::SlotSubscriber,
     types::{
-        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
+        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderParams,
         OrderStatus, ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
     },
     utils::get_http_url,
@@ -30,9 +30,9 @@ use drift_rs::{
 };
 use futures_util::{
     stream::{FuturesOrdered, FuturesUnordered},
-    StreamExt,
+    FutureExt, StreamExt,
 };
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use rust_decimal::Decimal;
 use sha256::digest;
 use solana_account_decoder_client_types::UiAccountEncoding;
@@ -48,8 +48,9 @@ use crate::{
     types::{
         get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, AuthorityResponse,
         CancelAndPlaceRequest, CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse,
-        GetPositionsRequest, GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest,
-        Order, PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SignedMsgOrderResult,
+        GetPositionsRequest, GetPositionsResponse, IncomingSignedMessage, Market,
+        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
+        PlaceOrderResponse, PlaceOrderType, PlaceOrdersRequest, SignedMsgOrderResult,
         SignedMsgResponse, SolBalanceResponse, SpotPosition, SwapRequest, TxEventsResponse,
         TxResponse, UserCollateralResponse, UserLeverageResponse, UserMarginResponse,
         PRICE_DECIMALS,
@@ -632,8 +633,9 @@ impl AppState {
                 }
             }
             PlaceOrderType::SignedMsg => {
-                let mut signed_messages = Vec::with_capacity(req.orders.len());
-                let mut hashes: Vec<String> = Vec::with_capacity(req.orders.len());
+                let orders_len = orders_iter.len();
+                let mut signed_messages = Vec::with_capacity(orders_len);
+                let mut hashes: Vec<String> = Vec::with_capacity(orders_len);
                 let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
                 let current_slot = self.slot_subscriber.current_slot();
                 let orders_with_hex: Vec<(OrderParams, Vec<u8>)> = orders_iter
@@ -654,10 +656,10 @@ impl AppState {
                     .collect();
 
                 for (order, message) in orders_with_hex {
-                    let signature = self.wallet.sign_message(message.as_slice())?; // TODO: generate signature
-                    let market_type = match order.market_type {
-                        MarketType::Spot => "spot".to_string(),
-                        MarketType::Perp => "perp".to_string(),
+                    let signature = self.wallet.sign_message(message.as_slice())?;
+                    let market_type: &'static str = match order.market_type {
+                        MarketType::Spot => "spot",
+                        MarketType::Perp => "perp",
                     };
                     let incoming_msg = IncomingSignedMessage {
                         taker_authority: self.authority().to_string(),
@@ -669,7 +671,7 @@ impl AppState {
                     };
 
                     signed_messages.push(incoming_msg);
-                    let hash = digest(signature.as_bytes());
+                    let hash = digest(signature.as_ref());
                     hashes.push(hash);
                 }
 
@@ -681,8 +683,6 @@ impl AppState {
                     .unwrap_or("https://master.swift.drift.trade".to_string())
                     + "/orders";
 
-                let mut responses: Vec<(String, String)> = Vec::new();
-
                 let mut futures = FuturesOrdered::new();
                 for msg in signed_messages {
                     let future =
@@ -690,27 +690,26 @@ impl AppState {
                             .post(&swift_orders_url)
                             .json(&msg)
                             .send()
-                            .map(|resp| async move {
+                            .then(|resp| async move {
                                 match resp {
                                     Ok(response) => {
                                         let status = response.status();
                                         let response_text =
                                             response.text().await.unwrap_or_default();
-                                        Ok((status.to_string(), response_text))
+                                        (status.to_string(), response_text)
                                     }
-                                    Err(e) => Err(ControllerError::BadRequest(format!(
-                                        "HTTP request failed: {}",
-                                        e
-                                    ))),
+                                    Err(e) => {
+                                        ("500".to_string(), format!("swift server error: {:?}", e))
+                                    }
                                 }
                             });
                     futures.push_back(future);
                 }
 
-                let responses = futures.collect::<Vec<(String, String)>>().await;
+                let responses: Vec<_> = futures.collect().await;
 
                 let signed_msg = SignedMsgResponse {
-                    signed_msg_order_results: hashes
+                    results: hashes
                         .iter()
                         .zip(responses)
                         .map(|(hash, (status, response))| SignedMsgOrderResult {

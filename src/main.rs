@@ -611,7 +611,17 @@ mod tests {
 
         let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
+        let state = AppState::new(
+            &rpc_endpoint,
+            false,
+            wallet,
+            None,
+            None,
+            false,
+            vec![],
+            None,
+        )
+        .await;
 
         let app =
             test::init_service(App::new().app_data(web::Data::new(state)).service(swap)).await;
@@ -644,7 +654,17 @@ mod tests {
 
         let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let state = AppState::new(&rpc_endpoint, false, wallet, None, None, false, vec![]).await;
+        let state = AppState::new(
+            &rpc_endpoint,
+            false,
+            wallet,
+            None,
+            None,
+            false,
+            vec![],
+            None,
+        )
+        .await;
 
         let app =
             test::init_service(App::new().app_data(web::Data::new(state)).service(swap)).await;

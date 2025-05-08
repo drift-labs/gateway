@@ -308,10 +308,10 @@ impl<'de> Deserialize<'de> for PlaceOrderType {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        match s.as_str() {
+        let s: &str = Deserialize::deserialize(deserializer)?;
+        match s {
             "tx" => Ok(PlaceOrderType::Tx),
-            "signed_msg" => Ok(PlaceOrderType::SignedMsg),
+            "swift" => Ok(PlaceOrderType::SignedMsg),
             _ => Err(serde::de::Error::custom(format!(
                 "unknown place order type: {}",
                 s
@@ -334,8 +334,8 @@ pub fn de_market_type<'de, D>(deserializer: D) -> Result<MarketType, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    match s.as_str() {
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    match s {
         "perp" => Ok(MarketType::Perp),
         "spot" => Ok(MarketType::Spot),
         _ => Err(serde::de::Error::custom(format!(
@@ -423,7 +423,7 @@ impl PlaceOrder {
         let borsh_bytes = borsh_encoding.as_slice();
         let mut hex_bytes = vec![0; borsh_bytes.len() * 2]; // 2 hex bytes per msg byte
         let _ = faster_hex::hex_encode(borsh_bytes, &mut hex_bytes).expect("hexified");
-        hex_bytes.as_slice().to_owned()
+        hex_bytes
     }
 }
 
@@ -606,7 +606,7 @@ impl TxEventsResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignedMsgResponse {
-    pub signed_msg_order_results: Vec<SignedMsgOrderResult>,
+    pub results: Vec<SignedMsgOrderResult>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -617,6 +617,7 @@ pub struct SignedMsgOrderResult {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase", untagged)]
 pub enum PlaceOrderResponse {
     Tx(TxResponse),
     SignedMsg(SignedMsgResponse),
@@ -704,7 +705,7 @@ pub struct IncomingSignedMessage {
     pub signature: String,
     pub message: String,
     pub signing_authority: String,
-    pub market_type: String,
+    pub market_type: &'static str,
     pub market_index: u16,
 }
 
