@@ -20,19 +20,21 @@ use drift_rs::{
         },
     },
     priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
+    slot_subscriber::SlotSubscriber,
     types::{
-        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderStatus,
-        ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
+        self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderParams,
+        OrderStatus, ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
     },
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
 use futures_util::{
     stream::{FuturesOrdered, FuturesUnordered},
-    StreamExt,
+    FutureExt, StreamExt,
 };
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use rust_decimal::Decimal;
+use sha256::digest;
 use solana_account_decoder_client_types::UiAccountEncoding;
 use solana_rpc_client_api::{
     client_error::ErrorKind as ClientErrorKind,
@@ -46,13 +48,21 @@ use crate::{
     types::{
         get_market_decimals, scale_decimal_to_u64, AllMarketsResponse, AuthorityResponse,
         CancelAndPlaceRequest, CancelOrdersRequest, GetOrdersRequest, GetOrdersResponse,
-        GetPositionsRequest, GetPositionsResponse, Market, MarketInfoResponse, ModifyOrdersRequest,
-        Order, PerpPosition, PerpPositionExtended, PlaceOrdersRequest, SolBalanceResponse,
-        SpotPosition, SwapRequest, TxEventsResponse, TxResponse, UserCollateralResponse,
-        UserLeverageResponse, UserMarginResponse, PRICE_DECIMALS,
+        GetPositionsRequest, GetPositionsResponse, IncomingSignedMessage, Market,
+        MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
+        PlaceOrderResponse, PlaceOrderType, PlaceOrdersRequest, SignedMsgOrderResult,
+        SignedMsgResponse, SolBalanceResponse, SpotPosition, SwapRequest, TxEventsResponse,
+        TxResponse, UserCollateralResponse, UserLeverageResponse, UserMarginResponse,
+        PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
+};
+
+use base64::{
+    alphabet,
+    engine::{self, general_purpose},
+    Engine as _,
 };
 
 /// Default TTL in seconds of gateway tx retry
@@ -85,8 +95,11 @@ pub struct AppState {
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
     priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
+    slot_subscriber: Arc<SlotSubscriber>,
     /// list of additional RPC endpoints for tx broadcast
     extra_rpcs: Vec<Arc<RpcClient>>,
+    /// swift node url
+    swift_node: Option<String>,
 }
 
 impl AppState {
@@ -123,6 +136,7 @@ impl AppState {
         default_subaccount_id: Option<u16>,
         skip_tx_preflight: bool,
         extra_rpcs: Vec<&str>,
+        swift_node: Option<String>,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -167,17 +181,25 @@ impl AppState {
             priority_fee_subscriber.subscribe()
         };
 
+        let mut slot_subscriber = SlotSubscriber::new(client.ws());
+        slot_subscriber
+            .subscribe(|new_slot| {
+                trace!(target: LOG_TARGET, "app_state slot_updated: {:#?}", new_slot);
+            })
+            .expect("slot subscribed");
         Self {
             client: Arc::new(client),
             tx_commitment,
             default_subaccount_id: default_subaccount_id.unwrap_or(0),
             skip_tx_preflight,
             priority_fee_subscriber,
+            slot_subscriber: Arc::new(slot_subscriber),
             wallet: Arc::new(wallet),
             extra_rpcs: extra_rpcs
                 .into_iter()
                 .map(|u| Arc::new(RpcClient::new(get_http_url(u).expect("valid RPC url"))))
                 .collect(),
+            swift_node,
         }
     }
 
@@ -253,7 +275,7 @@ impl AppState {
 
         let open_orders = self.client.all_orders(&self.default_sub_account()).await?;
 
-        let mut user_markets: Vec<MarketId> = all_spot
+        let user_markets: Vec<MarketId> = all_spot
             .iter()
             .map(|s| MarketId::spot(s.market_index))
             .chain(all_perp.iter().map(|p| MarketId::perp(p.market_index)))
@@ -265,7 +287,6 @@ impl AppState {
                 }
             }))
             .collect();
-        user_markets.push(MarketId::QUOTE_SPOT);
 
         Ok(user_markets)
     }
@@ -578,32 +599,130 @@ impl AppState {
         &self,
         ctx: Context,
         req: PlaceOrdersRequest,
-    ) -> GatewayResult<TxResponse> {
+    ) -> GatewayResult<PlaceOrderResponse> {
         let sub_account = self.resolve_sub_account(ctx.sub_account_id);
         let account_data = self.client.get_user_account(&sub_account).await?;
         let pf = self.get_priority_fee();
         let priority_fee = ctx.cu_price.unwrap_or(pf);
         debug!(target: LOG_TARGET, "priority fee: {priority_fee:?}");
 
-        let orders = req
-            .orders
-            .into_iter()
-            .map(|o| {
-                let base_decimals = get_market_decimals(self.client.program_data(), o.market);
-                o.to_order_params(base_decimals)
-            })
-            .collect();
-        let tx = TransactionBuilder::new(
-            self.client.program_data(),
-            sub_account,
-            Cow::Owned(account_data),
-            self.wallet.is_delegated(),
-        )
-        .with_priority_fee(priority_fee, ctx.cu_limit)
-        .place_orders(orders)
-        .build();
+        let orders_iter = req.orders.into_iter();
+        match req.place_order_type {
+            PlaceOrderType::Tx => {
+                let orders = orders_iter
+                    .map(|o| {
+                        let base_decimals =
+                            get_market_decimals(self.client.program_data(), o.market);
+                        o.to_order_params(base_decimals)
+                    })
+                    .collect();
+                let tx = TransactionBuilder::new(
+                    self.client.program_data(),
+                    sub_account,
+                    Cow::Owned(account_data),
+                    self.wallet.is_delegated(),
+                )
+                .with_priority_fee(priority_fee, ctx.cu_limit)
+                .place_orders(orders)
+                .build();
 
-        self.send_tx(tx, "place_orders", ctx.ttl).await
+                let tx_res = self.send_tx(tx, "place_orders", ctx.ttl).await;
+                match tx_res {
+                    Ok(tx_res) => Ok(PlaceOrderResponse::Tx(tx_res)),
+                    Err(e) => Err(e),
+                }
+            }
+            PlaceOrderType::SignedMsg => {
+                let orders_len = orders_iter.len();
+                let mut signed_messages = Vec::with_capacity(orders_len);
+                let mut hashes: Vec<String> = Vec::with_capacity(orders_len);
+                let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
+                let current_slot = self.slot_subscriber.current_slot();
+                let orders_with_hex: Vec<(OrderParams, Vec<u8>)> = orders_iter
+                    .map(|order| {
+                        let base_decimals =
+                            get_market_decimals(self.client.program_data(), order.market);
+                        let order_for_signing_hex = order.clone();
+                        let order_params = order.to_order_params(base_decimals);
+                        (
+                            order_params,
+                            order_for_signing_hex.to_signed_order_hex(
+                                order_params,
+                                current_slot,
+                                sub_account_id,
+                            ),
+                        )
+                    })
+                    .collect();
+
+                for (order, message) in orders_with_hex {
+                    let signature = self.wallet.sign_message(message.as_slice())?;
+                    let market_type: &'static str = match order.market_type {
+                        MarketType::Spot => "spot",
+                        MarketType::Perp => "perp",
+                    };
+                    let incoming_msg = IncomingSignedMessage {
+                        taker_authority: self.authority().to_string(),
+                        signature: general_purpose::STANDARD.encode(signature),
+                        message: String::from_utf8(message).unwrap(),
+                        signing_authority: self.signer().to_string(),
+                        market_type,
+                        market_index: order.market_index,
+                    };
+
+                    signed_messages.push(incoming_msg);
+                    let hash = digest(signature.as_ref());
+                    hashes.push(hash);
+                }
+
+                let client = reqwest::Client::new();
+
+                let swift_orders_url = self
+                    .swift_node
+                    .clone()
+                    .unwrap_or("https://master.swift.drift.trade".to_string())
+                    + "/orders";
+
+                let mut futures = FuturesOrdered::new();
+                for msg in signed_messages {
+                    let future =
+                        client
+                            .post(&swift_orders_url)
+                            .json(&msg)
+                            .send()
+                            .then(|resp| async move {
+                                match resp {
+                                    Ok(response) => {
+                                        let status = response.status();
+                                        let response_text =
+                                            response.text().await.unwrap_or_default();
+                                        (status.to_string(), response_text)
+                                    }
+                                    Err(e) => {
+                                        ("500".to_string(), format!("swift server error: {:?}", e))
+                                    }
+                                }
+                            });
+                    futures.push_back(future);
+                }
+
+                let responses: Vec<_> = futures.collect().await;
+
+                let signed_msg = SignedMsgResponse {
+                    results: hashes
+                        .iter()
+                        .zip(responses)
+                        .map(|(hash, (status, response))| SignedMsgOrderResult {
+                            hash: hash.clone(),
+                            status: status.clone(),
+                            error: Some(response.clone()),
+                        })
+                        .collect(),
+                };
+
+                Ok(PlaceOrderResponse::SignedMsg(signed_msg))
+            }
+        }
     }
 
     pub async fn modify_orders(

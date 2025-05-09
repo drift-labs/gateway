@@ -7,18 +7,23 @@ edition = "2021"
 actix-web = "*"
 argh = "*"
 drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "6d2d6e0" }
+base64 = "0.22.1"
 env_logger = "*"
+faster-hex = "0.10.0"
 futures-util = "*"
 log = "*"
+nanoid = "0.4.0"
+reqwest = { version = "*", features = ["json"] }
 rust_decimal = "*"
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
+sha256 = "1.6.0"
 solana-account-decoder-client-types = "2.2.2"
 solana-rpc-client-api = "2"
 solana-sdk = "2"
 solana-transaction-status = "2"
 thiserror = "*"
-tokio = "*"
+tokio = {version ="*", features = ["full"]}
 tokio-tungstenite = "*"
 
 [profile.release]
