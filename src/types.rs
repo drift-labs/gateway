@@ -417,6 +417,7 @@ impl PlaceOrder {
             stop_loss_order_params: None,   // TODO: add stop loss order params
         };
 
+        // TODO: support delegate signed message type here
         let signed_order_type = SignedOrderType::Authority(order);
 
         let borsh_encoding = signed_order_type.to_borsh();
