@@ -157,7 +157,8 @@ Options:
   --commitment      solana commitment level to use for state updates (default:
                     confirmed)
   --default-sub-account-id
-                    default sub_account_id to use (default: 0)
+                    default sub_account_id to use as default. Use the new active-sub-accounts param to subscribe to multiple sub accounts. This param will override active-sub-accounts.
+  --active-sub-accounts sub accounts to subscribe to. (default: 0)
   --skip-tx-preflight
                     skip tx preflight checks
   --extra-rpcs      extra solana RPC urls for improved Tx broadcast
