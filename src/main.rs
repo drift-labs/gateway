@@ -278,12 +278,14 @@ async fn main() -> std::io::Result<()> {
         .expect("one of: processed | confirmed | finalized");
     let extra_rpcs = config.extra_rpcs.as_ref();
 
-        let sub_account_ids = vec![config.default_sub_account_id.unwrap()].extend(
-                config
+    let mut sub_account_ids = vec![config.default_sub_account_id];
+    sub_account_ids.extend(
+        config
             .active_sub_accounts
             .split(",")
-            .map(|s| s.parse::<u16>().unwrap())
-           );
+            .map(|s| s.parse::<u16>().unwrap()),
+    );
+    sub_account_ids.dedup();
 
     let state = AppState::new(
         &config.rpc_host,
@@ -337,17 +339,17 @@ async fn main() -> std::io::Result<()> {
     if delegate.is_some() {
         info!(
             target: LOG_TARGET,
-            "🪪 authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
+            "🪪 authority: {:?}, sub-accounts: {:?}, 🔑 delegate: {:?}",
             state.authority(),
-            sub_account_ids.iter().map(|id| state.sub_account(*id)),
+            sub_account_ids,
             state.signer(),
         );
     } else {
         info!(
             target: LOG_TARGET,
-            "🪪 authority: {:?}, default sub-account: {:?}",
+            "🪪 authority: {:?}, sub-accounts: {:?}",
             state.authority(),
-            state.sub_account(config.default_sub_account_id.unwrap_or(0))
+            sub_account_ids
         );
         if emulate.is_some() {
             warn!("using emulation mode, tx signing unavailable");
