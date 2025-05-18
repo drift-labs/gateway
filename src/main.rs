@@ -299,6 +299,7 @@ async fn main() -> std::io::Result<()> {
                 std::env::var("GRPC_ENDPOINT").expect("GRPC_ENDPOINT set"),
                 std::env::var("GRPC_X_TOKEN").expect("GRPC_X_TOKEN set"),
                 GrpcSubscribeOpts::default(),
+                true,
             )
             .await
             .expect("gRPC subscribed");
