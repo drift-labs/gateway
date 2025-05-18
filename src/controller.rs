@@ -90,7 +90,7 @@ pub struct AppState {
     pub client: Arc<DriftClient>,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
-    /// default sub_account_id to use if not provided
+    /// sub_account_ids to subscribe to
     sub_account_ids: Vec<u16>,
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
@@ -116,7 +116,7 @@ impl AppState {
     }
     pub fn resolve_sub_account(&self, sub_account_id: Option<u16>) -> Pubkey {
         self.wallet
-            .sub_account(sub_account_id.unwrap_or(self.sub_account_ids[0]))
+            .sub_account(sub_account_id.unwrap_or(self.default_sub_account_id()))
     }
 
     /// Initialize Gateway Drift client
@@ -151,8 +151,8 @@ impl AppState {
             .await
             .expect("ok");
 
-        for sub_account_id in sub_account_ids.clone() {
-            let sub_account = wallet.sub_account(sub_account_id);
+        for sub_account_id in &sub_account_ids {
+            let sub_account = wallet.sub_account(*sub_account_id);
             if let Err(err) = client.subscribe_account(&sub_account).await {
                 log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}. subaccount: {sub_account_id}");
             } else {
@@ -667,7 +667,7 @@ impl AppState {
                 let orders_len = orders_iter.len();
                 let mut signed_messages = Vec::with_capacity(orders_len);
                 let mut hashes: Vec<String> = Vec::with_capacity(orders_len);
-                let sub_account_id = ctx.sub_account_id.unwrap_or(self.sub_account_ids[0]);
+                let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
                 let current_slot = self.slot_subscriber.current_slot();
                 let orders_with_hex: Vec<(OrderParams, Vec<u8>)> = orders_iter
                     .map(|order| {
@@ -927,7 +927,7 @@ impl AppState {
         ctx: Context,
         new_margin_ratio: Decimal,
     ) -> GatewayResult<TxResponse> {
-        let sub_account_id = ctx.sub_account_id.unwrap_or(self.sub_account_ids[0]);
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
         let sub_account_address = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account_address).await?;
 
@@ -946,6 +946,10 @@ impl AppState {
         )
         .build();
         self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
+    }
+
+    pub fn default_sub_account_id(&self) -> u16 {
+        self.sub_account_ids[0]
     }
 
     fn get_priority_fee(&self) -> u64 {
