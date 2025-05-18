@@ -509,8 +509,8 @@ struct GatewayConfig {
     #[argh(option, default = "String::from(\"confirmed\")")]
     commitment: String,
     /// default sub_account_id to use (default: 0)
-    #[argh(option)]
-    default_sub_account_id: Option<u16>,
+    #[argh(option, default = "0")]
+    default_sub_account_id: u16,
     /// list of active sub_account_ids to use (default: 0)
     #[argh(option, default = "String::from(\"0\")")]
     active_sub_accounts: String,
