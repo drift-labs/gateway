@@ -278,15 +278,12 @@ async fn main() -> std::io::Result<()> {
         .expect("one of: processed | confirmed | finalized");
     let extra_rpcs = config.extra_rpcs.as_ref();
 
-    let sub_account_ids: Vec<u16> = if config.default_sub_account_id.is_some() {
-        vec![config.default_sub_account_id.unwrap()]
-    } else {
-        config
+        let sub_account_ids = vec![config.default_sub_account_id.unwrap()].extend(
+                config
             .active_sub_accounts
             .split(",")
             .map(|s| s.parse::<u16>().unwrap())
-            .collect()
-    };
+           );
 
     let state = AppState::new(
         &config.rpc_host,
