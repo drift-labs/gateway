@@ -464,6 +464,22 @@ fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>
     )))
 }
 
+fn default_swift_node() -> String {
+    let strings: Vec<String> = std::env::args_os()
+        .map(|s| s.into_string())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|arg| {
+            eprintln!("Invalid utf8: {}", arg.to_string_lossy());
+            std::process::exit(1)
+        });
+    let is_dev = strings.iter().any(|s| s.to_string() == "--dev".to_string());
+    if is_dev {
+        "https://master.swift.drift.trade".to_string()
+    } else {
+        "https://swift.drift.trade".to_string()
+    }
+}
+
 #[derive(FromArgs)]
 /// Drift gateway server
 struct GatewayConfig {
@@ -476,7 +492,7 @@ struct GatewayConfig {
     #[argh(option)]
     markets: Option<String>,
     /// swift node url
-    #[argh(option, default = "String::from(\"https://master.swift.drift.trade\")")]
+    #[argh(option, default = "default_swift_node()")]
     swift_node: String,
     /// run in devnet mode
     #[argh(switch)]
