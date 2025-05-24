@@ -90,8 +90,8 @@ pub struct AppState {
     pub client: Arc<DriftClient>,
     /// Solana tx commitment level for preflight confirmation
     tx_commitment: CommitmentConfig,
-    /// default sub_account_id to use if not provided
-    default_subaccount_id: u16,
+    /// sub_account_ids to subscribe to
+    sub_account_ids: Vec<u16>,
     /// skip tx preflight on send or not (default: false)
     skip_tx_preflight: bool,
     priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
@@ -99,7 +99,7 @@ pub struct AppState {
     /// list of additional RPC endpoints for tx broadcast
     extra_rpcs: Vec<Arc<RpcClient>>,
     /// swift node url
-    swift_node: Option<String>,
+    swift_node: String,
 }
 
 impl AppState {
@@ -111,12 +111,12 @@ impl AppState {
     pub fn signer(&self) -> Pubkey {
         self.wallet.signer()
     }
-    pub fn default_sub_account(&self) -> Pubkey {
-        self.wallet.sub_account(self.default_subaccount_id)
+    pub fn sub_account(&self, sub_account_id: u16) -> Pubkey {
+        self.wallet.sub_account(sub_account_id)
     }
     pub fn resolve_sub_account(&self, sub_account_id: Option<u16>) -> Pubkey {
         self.wallet
-            .sub_account(sub_account_id.unwrap_or(self.default_subaccount_id))
+            .sub_account(sub_account_id.unwrap_or(self.default_sub_account_id()))
     }
 
     /// Initialize Gateway Drift client
@@ -125,7 +125,7 @@ impl AppState {
     /// * `devnet` - whether to run against devnet or not
     /// * `wallet` - wallet to use for tx signing
     /// * `commitment` - Slot finalisation/commitement levels
-    /// * `default_subaccount_id` - by default all queries will use this sub-account
+    /// * `sub_account_ids` - the sub_accounts to subscribe too. In your query specify a specific subaccount, otherwise subaccount 0 will be used as default
     /// * `skip_tx_preflight` - submit txs without checking preflight results
     /// * `extra_rpcs` - list of additional RPC endpoints for tx submission
     pub async fn new(
@@ -133,10 +133,10 @@ impl AppState {
         devnet: bool,
         wallet: Wallet,
         commitment: Option<(CommitmentConfig, CommitmentConfig)>,
-        default_subaccount_id: Option<u16>,
+        sub_account_ids: Vec<u16>,
         skip_tx_preflight: bool,
         extra_rpcs: Vec<&str>,
-        swift_node: Option<String>,
+        swift_node: String,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -151,11 +151,13 @@ impl AppState {
             .await
             .expect("ok");
 
-        let default_subaccount = wallet.sub_account(default_subaccount_id.unwrap_or(0));
-        if let Err(err) = client.subscribe_account(&default_subaccount).await {
-            log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}");
-        } else {
-            log::info!(target: LOG_TARGET, "subscribed to subaccount: {default_subaccount}");
+        for sub_account_id in &sub_account_ids {
+            let sub_account = wallet.sub_account(*sub_account_id);
+            if let Err(err) = client.subscribe_account(&sub_account).await {
+                log::error!(target: LOG_TARGET, "couldn't subscribe to user updates: {err:?}. subaccount: {sub_account_id}");
+            } else {
+                log::info!(target: LOG_TARGET, "subscribed to subaccount: {sub_account}");
+            }
         }
 
         let priority_fee_subscriber = PriorityFeeSubscriber::with_config(
@@ -190,7 +192,7 @@ impl AppState {
         Self {
             client: Arc::new(client),
             tx_commitment,
-            default_subaccount_id: default_subaccount_id.unwrap_or(0),
+            sub_account_ids,
             skip_tx_preflight,
             priority_fee_subscriber,
             slot_subscriber: Arc::new(slot_subscriber),
@@ -207,11 +209,26 @@ impl AppState {
         &self,
         configured_markets: &[MarketId],
     ) -> Result<(), SdkError> {
-        let default_sub_account = self.default_sub_account();
+        let sub_account_ids = self.sub_account_ids.clone();
+        for id in sub_account_ids {
+            self.sync_market_subscriptions_on_user_subaccount_changes(configured_markets, id)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn sync_market_subscriptions_on_user_subaccount_changes(
+        &self,
+        configured_markets: &[MarketId],
+        sub_account_id: u16,
+    ) -> Result<(), SdkError> {
+        let sub_account = self.sub_account(sub_account_id);
         let state_commitment = self.tx_commitment;
         let configured_markets_vec = configured_markets.to_vec();
         let self_clone = self.clone();
-        let mut current_user_markets_to_subscribe = self.get_marketids_to_subscribe().await?;
+        let mut current_user_markets_to_subscribe =
+            self.get_marketids_to_subscribe(sub_account).await?;
 
         tokio::spawn(async move {
             let pubsub_config = RpcAccountInfoConfig {
@@ -224,7 +241,7 @@ impl AppState {
             let pubsub_client = self_clone.client.ws();
 
             let (mut account_subscription, unsubscribe_fn) = match pubsub_client
-                .account_subscribe(&default_sub_account, Some(pubsub_config))
+                .account_subscribe(&sub_account, Some(pubsub_config))
                 .await
             {
                 Ok(res) => res,
@@ -239,7 +256,7 @@ impl AppState {
             // Process incoming account updates
             while let Some(_) = account_subscription.next().await {
                 let current_market_ids_count = current_user_markets_to_subscribe.len();
-                match self_clone.get_marketids_to_subscribe().await {
+                match self_clone.get_marketids_to_subscribe(sub_account).await {
                     Ok(new_market_ids) => {
                         if new_market_ids.len() != current_market_ids_count {
                             if let Err(err) = self_clone
@@ -267,13 +284,13 @@ impl AppState {
         Ok(())
     }
 
-    async fn get_marketids_to_subscribe(&self) -> Result<Vec<MarketId>, SdkError> {
-        let (all_spot, all_perp) = self
-            .client
-            .all_positions(&self.default_sub_account())
-            .await?;
+    async fn get_marketids_to_subscribe(
+        &self,
+        sub_account: Pubkey,
+    ) -> Result<Vec<MarketId>, SdkError> {
+        let (all_spot, all_perp) = self.client.all_positions(&sub_account).await?;
 
-        let open_orders = self.client.all_orders(&self.default_sub_account()).await?;
+        let open_orders = self.client.all_orders(&sub_account).await?;
 
         let user_markets: Vec<MarketId> = all_spot
             .iter()
@@ -296,11 +313,25 @@ impl AppState {
     /// * configured_markets - list of static markets provided by user
     ///
     /// additional subscriptions will be included based on user's current positions (on default sub-account)
+
     pub(crate) async fn subscribe_market_data(
         &self,
         configured_markets: &[MarketId],
     ) -> Result<(), SdkError> {
-        let mut user_markets = self.get_marketids_to_subscribe().await?;
+        for id in self.sub_account_ids.clone() {
+            self.subscribe_market_data_for_subaccount(configured_markets, id)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn subscribe_market_data_for_subaccount(
+        &self,
+        configured_markets: &[MarketId],
+        sub_account_id: u16,
+    ) -> Result<(), SdkError> {
+        let sub_account = self.sub_account(sub_account_id);
+        let mut user_markets = self.get_marketids_to_subscribe(sub_account).await?;
         user_markets.extend_from_slice(configured_markets);
 
         let init_rpc_throttle: u64 = std::env::var("INIT_RPC_THROTTLE")
@@ -636,7 +667,7 @@ impl AppState {
                 let orders_len = orders_iter.len();
                 let mut signed_messages = Vec::with_capacity(orders_len);
                 let mut hashes: Vec<String> = Vec::with_capacity(orders_len);
-                let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
+                let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
                 let current_slot = self.slot_subscriber.current_slot();
                 let orders_with_hex: Vec<(OrderParams, Vec<u8>)> = orders_iter
                     .map(|order| {
@@ -663,7 +694,7 @@ impl AppState {
                     };
                     let incoming_msg = IncomingSignedMessage {
                         taker_authority: self.authority().to_string(),
-                        signature: general_purpose::STANDARD.encode(signature),
+                        signature: general_purpose::STANDARD.encode(signature), // TODO: test just using .to_string() for base64 encoding
                         message: String::from_utf8(message).unwrap(),
                         signing_authority: self.signer().to_string(),
                         market_type,
@@ -677,11 +708,7 @@ impl AppState {
 
                 let client = reqwest::Client::new();
 
-                let swift_orders_url = self
-                    .swift_node
-                    .clone()
-                    .unwrap_or("https://master.swift.drift.trade".to_string())
-                    + "/orders";
+                let swift_orders_url = self.swift_node.clone() + "/orders";
 
                 let mut futures = FuturesOrdered::new();
                 for msg in signed_messages {
@@ -900,7 +927,7 @@ impl AppState {
         ctx: Context,
         new_margin_ratio: Decimal,
     ) -> GatewayResult<TxResponse> {
-        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_subaccount_id);
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
         let sub_account_address = self.wallet.sub_account(sub_account_id);
         let account_data = self.client.get_user_account(&sub_account_address).await?;
 
@@ -919,6 +946,10 @@ impl AppState {
         )
         .build();
         self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
+    }
+
+    pub fn default_sub_account_id(&self) -> u16 {
+        self.sub_account_ids[0]
     }
 
     fn get_priority_fee(&self) -> u64 {

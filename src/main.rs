@@ -277,12 +277,22 @@ async fn main() -> std::io::Result<()> {
     let tx_commitment = CommitmentConfig::from_str(&config.tx_commitment)
         .expect("one of: processed | confirmed | finalized");
     let extra_rpcs = config.extra_rpcs.as_ref();
+
+    let mut sub_account_ids = vec![config.default_sub_account_id];
+    sub_account_ids.extend(
+        config
+            .active_sub_accounts
+            .split(",")
+            .map(|s| s.parse::<u16>().unwrap()),
+    );
+    sub_account_ids.dedup();
+
     let state = AppState::new(
         &config.rpc_host,
         config.dev,
         wallet,
         Some((state_commitment, tx_commitment)),
-        Some(config.default_sub_account_id),
+        sub_account_ids.clone(),
         config.skip_tx_preflight,
         extra_rpcs
             .map(|s| s.split(",").collect())
@@ -330,17 +340,17 @@ async fn main() -> std::io::Result<()> {
     if delegate.is_some() {
         info!(
             target: LOG_TARGET,
-            "🪪 authority: {:?}, default sub-account: {:?}, 🔑 delegate: {:?}",
+            "🪪 authority: {:?}, sub-accounts: {:?}, 🔑 delegate: {:?}",
             state.authority(),
-            state.default_sub_account(),
+            sub_account_ids,
             state.signer(),
         );
     } else {
         info!(
             target: LOG_TARGET,
-            "🪪 authority: {:?}, default sub-account: {:?}",
+            "🪪 authority: {:?}, sub-accounts: {:?}",
             state.authority(),
-            state.default_sub_account()
+            sub_account_ids
         );
         if emulate.is_some() {
             warn!("using emulation mode, tx signing unavailable");
@@ -455,6 +465,22 @@ fn handle_deser_error<T>(err: serde_json::Error) -> Either<HttpResponse, Json<T>
     )))
 }
 
+fn default_swift_node() -> String {
+    let strings: Vec<String> = std::env::args_os()
+        .map(|s| s.into_string())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|arg| {
+            eprintln!("Invalid utf8: {}", arg.to_string_lossy());
+            std::process::exit(1)
+        });
+    let is_dev = strings.iter().any(|s| s.to_string() == "--dev".to_string());
+    if is_dev {
+        "https://master.swift.drift.trade".to_string()
+    } else {
+        "https://swift.drift.trade".to_string()
+    }
+}
+
 #[derive(FromArgs)]
 /// Drift gateway server
 struct GatewayConfig {
@@ -467,8 +493,8 @@ struct GatewayConfig {
     #[argh(option)]
     markets: Option<String>,
     /// swift node url
-    #[argh(option)]
-    swift_node: Option<String>,
+    #[argh(option, default = "default_swift_node()")]
+    swift_node: String,
     /// run in devnet mode
     #[argh(switch)]
     dev: bool,
@@ -501,6 +527,9 @@ struct GatewayConfig {
     /// default sub_account_id to use (default: 0)
     #[argh(option, default = "0")]
     default_sub_account_id: u16,
+    /// list of active sub_account_ids to use (default: 0)
+    #[argh(option, default = "String::from(\"0\")")]
+    active_sub_accounts: String,
     /// skip tx preflight checks
     #[argh(switch)]
     skip_tx_preflight: bool,
@@ -552,7 +581,17 @@ mod tests {
         };
         let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![], None).await
+        AppState::new(
+            &rpc_endpoint,
+            true,
+            wallet,
+            None,
+            vec![0],
+            false,
+            vec![],
+            "https://master.swift.drift.trade".to_string(),
+        )
+        .await
     }
 
     // likely safe to ignore during development, mainly regression test for CI
@@ -573,8 +612,17 @@ mod tests {
 
         let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
             .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let state =
-            AppState::new(&rpc_endpoint, true, wallet, None, None, false, vec![], None).await;
+        let state = AppState::new(
+            &rpc_endpoint,
+            true,
+            wallet,
+            None,
+            vec![],
+            false,
+            vec![],
+            "https://master.swift.drift.trade".to_string(),
+        )
+        .await;
 
         let app = test::init_service(
             App::new()
@@ -617,10 +665,10 @@ mod tests {
             false,
             wallet,
             None,
-            None,
+            vec![],
             false,
             vec![],
-            None,
+            "https://master.swift.drift.trade".to_string(),
         )
         .await;
 
@@ -660,10 +708,10 @@ mod tests {
             false,
             wallet,
             None,
-            None,
+            vec![],
             false,
             vec![],
-            None,
+            "https://master.swift.drift.trade".to_string(),
         )
         .await;
 
