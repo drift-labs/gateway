@@ -1,3 +1,18 @@
+[workspace]
+members = [".", "crates/drift-gateway-types"]
+resolver = "2"
+
+[workspace.dependencies]
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "c6a3647" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rust_decimal = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+thiserror = "2"
+nanoid = "0.4"
+faster-hex = "0.10"
+
 [package]
 name = "drift-gateway"
 version = "1.5.3"
@@ -6,25 +21,27 @@ edition = "2021"
 [dependencies]
 actix-web = "*"
 argh = "*"
-drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "c6a3647" }
+drift-rs = { workspace = true }
 base64 = "0.22.1"
 env_logger = "*"
-faster-hex = "0.10.0"
+faster-hex = { workspace = true }
 futures-util = "*"
 log = "*"
-nanoid = "0.4.0"
-reqwest = { version = "*", features = ["json"] }
-rust_decimal = "*"
-serde = { version = "*", features = ["derive"] }
-serde_json = "*"
+nanoid = { workspace = true }
+reqwest = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 sha256 = "1.6.0"
 solana-account-decoder-client-types = "2"
 solana-rpc-client-api = "2"
 solana-sdk = "2"
 solana-transaction-status = "2"
-thiserror = "*"
-tokio = {version ="*", features = ["full"]}
+thiserror = { workspace = true }
+tokio = { workspace = true }
 tokio-tungstenite = "*"
+# Add dependency on our types crate
+drift-gateway-types = { path = "crates/drift-gateway-types" }
 
 [profile.release]
 panic = 'abort'

@@ -1,12 +1,8 @@
-use std::{
-    borrow::Cow,
-    collections::HashSet,
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{borrow::Cow, collections::HashSet, str::FromStr, sync::Arc, time::Duration};
 
 use base64::Engine as _;
+#[cfg(not(test))]
+use drift_rs::types::{ProgramError, RpcSendTransactionConfig};
 use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
@@ -24,15 +20,12 @@ use drift_rs::{
     slot_subscriber::SlotSubscriber,
     types::{
         self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderParams,
-        OrderStatus, ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
+        OrderStatus, SdkError, SdkResult, VersionedMessage,
     },
     utils::get_http_url,
     DriftClient, Pubkey, TransactionBuilder, Wallet,
 };
-use futures_util::{
-    stream::{FuturesOrdered, FuturesUnordered},
-    FutureExt, StreamExt,
-};
+use futures_util::{stream::FuturesOrdered, FutureExt, StreamExt};
 use log::{debug, info, trace, warn};
 use rust_decimal::Decimal;
 use sha256::digest;
@@ -63,6 +56,7 @@ use crate::{
 /// Default TTL in seconds of gateway tx retry
 /// after which gateway will no longer resubmit or monitor the tx
 // ~15 slots
+#[cfg(not(test))]
 const DEFAULT_TX_TTL: u16 = 6;
 
 pub type GatewayResult<T> = Result<T, ControllerError>;
@@ -88,10 +82,12 @@ pub struct AppState {
     /// sub_account_ids to subscribe to
     sub_account_ids: Vec<u16>,
     /// skip tx preflight on send or not (default: false)
+    #[allow(dead_code)]
     skip_tx_preflight: bool,
     priority_fee_subscriber: Arc<PriorityFeeSubscriber>,
     slot_subscriber: Arc<SlotSubscriber>,
     /// list of additional RPC endpoints for tx broadcast
+    #[allow(dead_code)]
     extra_rpcs: Vec<Arc<RpcClient>>,
     /// swift node url
     swift_node: String,
@@ -1011,14 +1007,14 @@ impl AppState {
         let tx_signature = sig;
         let extra_rpcs = self.extra_rpcs.clone();
         tokio::spawn(async move {
-            let start = SystemTime::now();
+            let start = std::time::SystemTime::now();
             let ttl = Duration::from_secs(ttl.unwrap_or(DEFAULT_TX_TTL) as u64);
             let mut confirmed = false;
-            while SystemTime::now()
+            while std::time::SystemTime::now()
                 .duration_since(start)
                 .is_ok_and(|x| x < ttl)
             {
-                let mut futs = FuturesUnordered::new();
+                let mut futs = futures_util::stream::FuturesUnordered::new();
                 for rpc in extra_rpcs.iter() {
                     futs.push(rpc.send_transaction_with_config(&tx, tx_config));
                 }
@@ -1052,6 +1048,7 @@ impl AppState {
     }
 }
 
+#[cfg(not(test))]
 fn handle_tx_err(err: SdkError) -> ControllerError {
     if let Some(program_err) = err.to_anchor_error_code() {
         match program_err {
