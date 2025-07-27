@@ -5,9 +5,8 @@
 use std::convert::TryInto;
 
 use drift_rs::{
-    constants::ProgramData,
     math::{
-        constants::{BASE_PRECISION, PRICE_PRECISION, QUOTE_PRECISION},
+        constants::{BASE_PRECISION, PRICE_PRECISION},
         liquidation::{CollateralInfo, MarginRequirementInfo},
     },
     swift_order_subscriber::SignedOrderType,
@@ -22,33 +21,29 @@ use nanoid::nanoid;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::websocket::AccountEvent;
-
-/// decimal places in price values
-pub const PRICE_DECIMALS: u32 = PRICE_PRECISION.ilog10();
-pub const QUOTE_DECIMALS: u32 = QUOTE_PRECISION.ilog10();
+use crate::{account_event::AccountEvent, PRICE_DECIMALS, QUOTE_DECIMALS};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
     #[serde(serialize_with = "order_type_ser", deserialize_with = "order_type_de")]
-    order_type: sdk_types::OrderType,
-    market_index: u16,
+    pub order_type: sdk_types::OrderType,
+    pub market_index: u16,
     #[serde(
         serialize_with = "ser_market_type",
         deserialize_with = "de_market_type"
     )]
-    market_type: MarketType,
-    amount: Decimal,
-    filled: Decimal,
-    price: Decimal,
-    post_only: bool,
-    reduce_only: bool,
-    user_order_id: u8,
-    order_id: u32,
-    immediate_or_cancel: bool,
+    pub market_type: MarketType,
+    pub amount: Decimal,
+    pub filled: Decimal,
+    pub price: Decimal,
+    pub post_only: bool,
+    pub reduce_only: bool,
+    pub user_order_id: u8,
+    pub order_id: u32,
+    pub immediate_or_cancel: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    oracle_price_offset: Option<Decimal>,
+    pub oracle_price_offset: Option<Decimal>,
 }
 
 impl Order {
@@ -113,10 +108,10 @@ where
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SpotPosition {
-    amount: Decimal,
+    pub amount: Decimal,
     #[serde(rename = "type")]
-    balance_type: String, // deposit or borrow
-    market_index: u16,
+    pub balance_type: String, // deposit or borrow
+    pub market_index: u16,
 }
 
 impl SpotPosition {
@@ -139,11 +134,11 @@ impl SpotPosition {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PerpPosition {
-    amount: Decimal,
-    average_entry: Decimal,
-    market_index: u16,
+    pub amount: Decimal,
+    pub average_entry: Decimal,
+    pub market_index: u16,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    extended: Option<PerpPositionExtended>,
+    pub extended: Option<PerpPositionExtended>,
 }
 
 impl PerpPosition {
@@ -200,13 +195,13 @@ pub struct ModifyOrdersRequest {
 pub struct ModifyOrder {
     #[serde(flatten)]
     pub market: Market,
-    amount: Option<Decimal>,
-    price: Option<Decimal>,
+    pub amount: Option<Decimal>,
+    pub price: Option<Decimal>,
     pub user_order_id: Option<u8>,
     pub order_id: Option<u32>,
-    reduce_only: Option<bool>,
-    oracle_price_offset: Option<Decimal>,
-    max_ts: Option<i64>,
+    pub reduce_only: Option<bool>,
+    pub oracle_price_offset: Option<Decimal>,
+    pub max_ts: Option<i64>,
 }
 
 impl ModifyOrder {
@@ -261,13 +256,13 @@ pub struct PlaceOrdersRequest {
 pub struct PlaceOrder {
     #[serde(flatten)]
     pub market: Market,
-    amount: Decimal,
+    pub amount: Decimal,
     #[serde(default)]
-    price: Decimal,
+    pub price: Decimal,
     #[serde(default)]
-    trigger_price: Option<Decimal>,
+    pub trigger_price: Option<Decimal>,
     #[serde(default)]
-    trigger_condition: Option<OrderTriggerCondition>,
+    pub trigger_condition: Option<OrderTriggerCondition>,
     /// 0 indicates it is not set (according to program)
     #[serde(default)]
     pub user_order_id: u8,
@@ -276,20 +271,20 @@ pub struct PlaceOrder {
         deserialize_with = "order_type_de",
         default
     )]
-    order_type: sdk_types::OrderType,
+    pub order_type: sdk_types::OrderType,
     #[serde(default)]
-    post_only: bool,
+    pub post_only: bool,
     #[serde(default)]
-    reduce_only: bool,
+    pub reduce_only: bool,
     #[serde(default)]
-    oracle_price_offset: Option<Decimal>,
-    max_ts: Option<i64>,
+    pub oracle_price_offset: Option<Decimal>,
+    pub max_ts: Option<i64>,
     #[serde(default)]
-    auction_duration: Option<u8>,
+    pub auction_duration: Option<u8>,
     #[serde(default)]
-    auction_start_price: Option<i64>,
+    pub auction_start_price: Option<i64>,
     #[serde(default)]
-    auction_end_price: Option<i64>,
+    pub auction_end_price: Option<i64>,
 }
 
 #[derive(Serialize, Debug)]
@@ -495,19 +490,19 @@ pub struct GetPositionsResponse {
     pub perp: Vec<PerpPosition>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketInfo {
     #[serde(rename = "marketIndex")]
-    market_id: u16,
-    symbol: String,
-    price_step: Decimal,
-    amount_step: Decimal,
-    min_order_size: Decimal,
+    pub market_id: u16,
+    pub symbol: String,
+    pub price_step: Decimal,
+    pub amount_step: Decimal,
+    pub min_order_size: Decimal,
     #[serde(skip_serializing_if = "Option::is_none")]
-    initial_margin_ratio: Option<Decimal>,
+    pub initial_margin_ratio: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    maintenance_margin_ratio: Option<Decimal>,
+    pub maintenance_margin_ratio: Option<Decimal>,
 }
 
 impl From<SpotMarket> for MarketInfo {
@@ -550,14 +545,15 @@ impl From<PerpMarket> for MarketInfo {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketInfoResponse {
     pub open_interest: u64,
     pub max_open_interest: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AllMarketsResponse {
     pub spot: Vec<MarketInfo>,
     pub perp: Vec<MarketInfo>,
@@ -579,7 +575,7 @@ pub struct CancelOrdersRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TxResponse {
-    tx: String,
+    pub tx: String,
 }
 
 impl TxResponse {
@@ -590,10 +586,10 @@ impl TxResponse {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct TxEventsResponse {
-    events: Vec<AccountEvent>,
-    success: bool,
+    pub events: Vec<AccountEvent>,
+    pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+    pub error: Option<String>,
 }
 
 impl TxEventsResponse {
@@ -632,31 +628,18 @@ pub struct CancelAndPlaceRequest {
     pub place: PlaceOrdersRequest,
 }
 
-/// Return the number of decimal places for the market
-#[inline]
-pub(crate) fn get_market_decimals(program_data: &ProgramData, market: Market) -> u32 {
-    if let MarketType::Perp = market.market_type {
-        BASE_PRECISION.ilog10()
-    } else {
-        let spot_market = program_data
-            .spot_market_config_by_index(market.market_index)
-            .expect("market exists");
-        spot_market.decimals
-    }
-}
-
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SolBalanceResponse {
     pub balance: Decimal,
     pub pubkey: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AuthorityResponse {
     pub pubkey: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UserMarginResponse {
     pub initial: Decimal,
     pub maintenance: Decimal,
@@ -673,7 +656,7 @@ impl From<MarginRequirementInfo> for UserMarginResponse {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UserLeverageResponse {
     pub leverage: Decimal,
 }
@@ -686,7 +669,7 @@ impl From<u128> for UserLeverageResponse {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UserCollateralResponse {
     pub total: Decimal,
     pub free: Decimal,
@@ -701,7 +684,7 @@ impl From<CollateralInfo> for UserCollateralResponse {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct IncomingSignedMessage {
     pub taker_authority: String,
     pub signature: String,
