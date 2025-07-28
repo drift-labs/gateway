@@ -2,6 +2,8 @@
 //! - gateway request/responses
 //! - wrappers for presenting drift program types with less implementation detail
 //!
+use std::convert::TryInto;
+
 use drift_rs::{
     constants::ProgramData,
     math::{
@@ -19,7 +21,6 @@ use drift_rs::{
 use nanoid::nanoid;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::TryInto;
 
 use crate::websocket::AccountEvent;
 

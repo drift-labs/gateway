@@ -6,6 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use base64::Engine as _;
 use drift_rs::{
     constants::ProgramData,
     drift_idl::{self, types::MarginRequirementType},
@@ -57,12 +58,6 @@ use crate::{
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
-};
-
-use base64::{
-    alphabet,
-    engine::{self, general_purpose},
-    Engine as _,
 };
 
 /// Default TTL in seconds of gateway tx retry
@@ -694,7 +689,7 @@ impl AppState {
                     };
                     let incoming_msg = IncomingSignedMessage {
                         taker_authority: self.authority().to_string(),
-                        signature: general_purpose::STANDARD.encode(signature), // TODO: test just using .to_string() for base64 encoding
+                        signature: base64::prelude::BASE64_STANDARD.encode(signature),
                         message: String::from_utf8(message).unwrap(),
                         signing_authority: self.signer().to_string(),
                         market_type,

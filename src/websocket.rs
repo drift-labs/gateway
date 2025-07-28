@@ -305,6 +305,8 @@ pub(crate) enum AccountEvent {
         tx_idx: usize,
         signature: String,
     },
+    #[serde(rename_all = "camelCase")]
+    Trigger { order_id: u32, oracle_price: u64 },
 }
 
 impl AccountEvent {
@@ -506,6 +508,18 @@ pub(crate) fn map_drift_event_for_account(
     sub_account_address: Pubkey,
 ) -> (Channel, Option<AccountEvent>) {
     match event {
+        DriftEvent::OrderTrigger {
+            user: _,
+            order_id,
+            oracle_price,
+            amount: _,
+        } => (
+            Channel::Orders,
+            Some(AccountEvent::Trigger {
+                order_id: *order_id,
+                oracle_price: *oracle_price,
+            }),
+        ),
         DriftEvent::OrderFill {
             maker,
             maker_fee,
@@ -523,6 +537,7 @@ pub(crate) fn map_drift_event_for_account(
             signature,
             tx_idx,
             ts,
+            bit_flags: _,
         } => {
             let decimals =
                 get_market_decimals(program_data, Market::new(*market_index, *market_type));
