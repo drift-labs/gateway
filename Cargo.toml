@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 actix-web = "*"
 argh = "*"
-drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "798bc05" }
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "c6a3647" }
 base64 = "0.22.1"
 env_logger = "*"
 faster-hex = "0.10.0"
@@ -18,7 +18,7 @@ rust_decimal = "*"
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 sha256 = "1.6.0"
-solana-account-decoder-client-types = "2.2.2"
+solana-account-decoder-client-types = "2"
 solana-rpc-client-api = "2"
 solana-sdk = "2"
 solana-transaction-status = "2"
