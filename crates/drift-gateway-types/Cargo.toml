@@ -1,0 +1,19 @@
+[package]
+name = "drift-gateway-types"
+version = "0.1.0"
+edition = "2021"
+description = "Shared types for Drift Gateway API"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/drift-labs/gateway"
+homepage = "https://drift.trade"
+categories = ["cryptography::cryptocurrencies", "api-bindings"]
+keywords = ["solana", "dex", "drift", "sdk"]
+
+[dependencies]
+drift-rs = { workspace = true }
+faster-hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rust_decimal = { workspace = true }
+nanoid = { workspace = true }
