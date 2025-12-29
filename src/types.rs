@@ -416,10 +416,14 @@ impl PlaceOrder {
             sub_account_id,
             take_profit_order_params: None, // TODO: add take profit order params
             stop_loss_order_params: None,   // TODO: add stop loss order params
+            max_margin_ratio: None,
+            builder_idx: None,
+            builder_fee_tenth_bps: None,
+            isolated_position_deposit: None,
         };
 
         // TODO: support delegate signed message type here
-        let signed_order_type = SignedOrderType::Authority(order);
+        let signed_order_type = SignedOrderType::authority(order);
 
         let borsh_encoding = signed_order_type.to_borsh();
         let borsh_bytes = borsh_encoding.as_slice();
