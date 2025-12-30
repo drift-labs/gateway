@@ -1623,6 +1623,7 @@ dependencies = [
  "actix-web",
  "argh",
  "base64 0.22.1",
+ "drift-gateway-types",
  "drift-rs",
  "env_logger 0.11.8",
  "faster-hex",
@@ -1641,6 +1642,18 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "drift-gateway-types"
+version = "0.1.0"
+dependencies = [
+ "drift-rs",
+ "faster-hex",
+ "nanoid",
+ "rust_decimal",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

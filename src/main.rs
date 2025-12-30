@@ -8,13 +8,14 @@ use actix_web::{
     App, Either, HttpResponse, HttpServer, Responder,
 };
 use argh::FromArgs;
+use drift_gateway_types as types;
+use drift_gateway_types::{SetLeverageRequest, SwapRequest};
 use drift_rs::{
     types::{CommitmentConfig, MarginRequirementType, MarketId},
     GrpcSubscribeOpts, Pubkey,
 };
 use log::{debug, info, warn};
 use serde_json::json;
-use types::{SetLeverageRequest, SwapRequest};
 
 use crate::{
     controller::{create_wallet, AppState, ControllerError},
@@ -24,7 +25,6 @@ use crate::{
 };
 
 mod controller;
-mod types;
 mod websocket;
 
 pub const LOG_TARGET: &str = "gateway";
