@@ -3,7 +3,7 @@ members = [".", "crates/drift-gateway-types"]
 resolver = "2"
 
 [workspace.dependencies]
-drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "c6a3647" }
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "6eeebd8" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rust_decimal = "1"
@@ -15,7 +15,7 @@ faster-hex = "0.10"
 
 [package]
 name = "drift-gateway"
-version = "1.5.3"
+version = "1.5.4"
 edition = "2021"
 
 [dependencies]
@@ -40,7 +40,6 @@ solana-transaction-status = "2"
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "*"
-# Add dependency on our types crate
 drift-gateway-types = { path = "crates/drift-gateway-types" }
 
 [profile.release]
