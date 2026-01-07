@@ -31,6 +31,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
       - [`PATCH` Modify Orders](#modify-orders)
       - [`DELETE` Cancel Orders](#cancel-orders)
       - [`POST` Swap](#swap-orders)
+      - [`POST` Titan Swap](#titan-swap-orders)
       - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
     - [Websocket API](#websocket-api)
       - [Subscribing](#subscribing)
@@ -129,6 +130,8 @@ These runtime environment variables are required:
 | `GRPC_HOST` | endpoint for gRPC subscription mode | `https://grpc.example.com`
 | `GRPC_X_TOKEN` | authentication token for gRPC subscription mode | `aabbccddeeff112233`
 | `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
+| `TITAN_AUTH_TOKEN` | **Required for `/v2/titan-swap`**. Authentication token for Titan API | `your-titan-auth-token` |
+| `TITAN_BASE_URL` | (Optional) Titan API base URL | `https://api.titan.exchange` |
 
 ```bash
 ./target/release/drift-gateway --help
@@ -760,6 +763,67 @@ curl -X POST "http://localhost:8080/v2/swap" \
   }'
 ```
 
+### Titan Swap Orders
+
+Executes a spot token swap using Titan routing and liquidity aggregation.
+
+⚠️ **Requires `TITAN_AUTH_TOKEN` environment variable to be set.**
+
+**Endpoint**: `POST /v2/titan-swap`
+
+**Environment Variables**:
+| Variable | Description |
+|----------|-------------|
+| `TITAN_AUTH_TOKEN` | **Required**. Authentication token for Titan API |
+| `TITAN_BASE_URL` | (Optional) Titan API base URL. Defaults to `https://api.titan.exchange` |
+
+**Parameters**:
+
+Request body:
+```json
+{
+  "inputMarket": number,   // Input spot market index
+  "outputMarket": number,  // Output spot market index
+  "exactIn": boolean,      // true = exactIn, false = exactOut 
+  "amount": string,        // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
+  "slippageBps": number,   // Max slippage in bps
+  "useDirectRoutes": bool, // (Optional) Direct Routes limits routing to single hop routes only
+  "excludeDexes": string,  // (Optional) comma separated list of dexes to exclude
+  "maxAccounts": number    // (Optional) limit number of accounts in swap instructions
+}
+```
+
+**Response**:
+
+Success (200):
+```json
+{
+  "signature": string,   // Transaction signature
+  "success": boolean    // Whether the swap was successful
+}
+```
+
+Error (400/500):
+```json
+{
+  "code": number,       // Error code
+  "reason": string     // Error description
+}
+```
+
+**Example**:
+USDC to SOL
+```bash
+curl -X POST "http://localhost:8080/v2/titan-swap" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputMarket": 0,
+    "outputMarket": 1,
+    "exactIn": true,
+    "amount": "500.0",
+    "slippageBps": 10
+  }'
+```
 
 ## WebSocket API
 

@@ -12,6 +12,7 @@ use drift_rs::{
     drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     jupiter::{JupiterSwapApi, SwapMode},
+    titan::{SwapMode as TitanSwapMode, TitanSwapApi},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -52,9 +53,9 @@ use crate::{
         GetPositionsRequest, GetPositionsResponse, IncomingSignedMessage, Market,
         MarketInfoResponse, ModifyOrdersRequest, Order, PerpPosition, PerpPositionExtended,
         PlaceOrderResponse, PlaceOrderType, PlaceOrdersRequest, SignedMsgOrderResult,
-        SignedMsgResponse, SolBalanceResponse, SpotPosition, SwapRequest, TxEventsResponse,
-        TxResponse, UserCollateralResponse, UserLeverageResponse, UserMarginResponse,
-        PRICE_DECIMALS,
+        SignedMsgResponse, SolBalanceResponse, SpotPosition, SwapRequest, TitanSwapRequest,
+        TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
+        UserMarginResponse, PRICE_DECIMALS,
     },
     websocket::map_drift_event_for_account,
     Context, LOG_TARGET,
@@ -828,6 +829,75 @@ impl AppState {
         .build();
 
         self.send_tx(tx, "swap", ctx.ttl).await
+    }
+
+    pub async fn titan_swap(
+        &self,
+        ctx: Context,
+        req: TitanSwapRequest,
+    ) -> GatewayResult<TxResponse> {
+        let sub_account = self.resolve_sub_account(ctx.sub_account_id);
+
+        let in_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.input_market)
+            .unwrap();
+        let out_market = self
+            .client
+            .program_data()
+            .spot_market_config_by_index(req.output_market)
+            .unwrap();
+
+        let (swap_mode, amount) = if req.exact_in {
+            (
+                TitanSwapMode::ExactIn,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(in_market.decimals)),
+            )
+        } else {
+            (
+                TitanSwapMode::ExactOut,
+                scale_decimal_to_u64(req.amount.abs(), 10_u32.pow(out_market.decimals)),
+            )
+        };
+
+        let signer = self.wallet.signer();
+        let (titan_swap_info, account_data) = tokio::try_join!(
+            self.client.titan_swap_query(
+                &signer,
+                amount,
+                req.max_accounts,
+                swap_mode,
+                req.slippage_bps,
+                req.input_market,
+                req.output_market,
+                req.use_direct_routes,
+                req.exclude_dexes,
+                None, // providers
+            ),
+            self.client.get_user_account(&sub_account)
+        )?;
+        let pf = self.get_priority_fee();
+
+        let tx = TransactionBuilder::new(
+            self.client.program_data(),
+            sub_account,
+            Cow::Owned(account_data),
+            self.wallet.is_delegated(),
+        )
+        .titan_swap(
+            titan_swap_info,
+            in_market,
+            out_market,
+            &Wallet::derive_associated_token_address(&signer, in_market),
+            &Wallet::derive_associated_token_address(&signer, out_market),
+            None,
+            None,
+        )
+        .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
+        .build();
+
+        self.send_tx(tx, "titan_swap", ctx.ttl).await
     }
 
     pub async fn get_tx_events_for_subaccount_id(

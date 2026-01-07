@@ -1646,7 +1646,7 @@ dependencies = [
 [[package]]
 name = "drift-idl-gen"
 version = "0.2.0"
-source = "git+https://github.com/drift-labs/drift-rs?rev=6eeebd8#6eeebd899ad907ce8476fb3a0b8836393b57f934"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ae44a2d#ae44a2d9992d6cdd88331e64b64fad9a06e26da9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1659,7 +1659,7 @@ dependencies = [
 [[package]]
 name = "drift-pubsub-client"
 version = "0.1.1"
-source = "git+https://github.com/drift-labs/drift-rs?rev=6eeebd8#6eeebd899ad907ce8476fb3a0b8836393b57f934"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ae44a2d#ae44a2d9992d6cdd88331e64b64fad9a06e26da9"
 dependencies = [
  "futures-util",
  "gjson",
@@ -1679,7 +1679,7 @@ dependencies = [
 [[package]]
 name = "drift-rs"
 version = "1.0.0-alpha.16"
-source = "git+https://github.com/drift-labs/drift-rs?rev=6eeebd8#6eeebd899ad907ce8476fb3a0b8836393b57f934"
+source = "git+https://github.com/drift-labs/drift-rs?rev=ae44a2d#ae44a2d9992d6cdd88331e64b64fad9a06e26da9"
 dependencies = [
  "abi_stable",
  "ahash 0.8.12",
@@ -1708,6 +1708,7 @@ dependencies = [
  "solana-transaction-status",
  "spl-associated-token-account",
  "thiserror 1.0.69",
+ "titan-swap-api-client",
  "tokio",
  "tokio-stream",
  "tokio-tungstenite",
@@ -3790,6 +3791,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "rmp"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ba8be72d372b2c9b35542551678538b562e7cf86c3315773cae48dfbfe7790c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "rmp-serde"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
+dependencies = [
+ "rmp",
+ "serde",
 ]
 
 [[package]]
@@ -6553,6 +6573,20 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "titan-swap-api-client"
+version = "0.1.0"
+source = "git+https://github.com/0xahzam/titan-swap-api-client.git#ce327b436802a5c7830b246b80bdea7a3e5d244c"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "rmp-serde",
+ "serde",
+ "solana-sdk",
+ "thiserror 2.0.17",
+ "tokio",
+]
 
 [[package]]
 name = "tokio"

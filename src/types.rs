@@ -182,6 +182,19 @@ pub struct SwapRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct TitanSwapRequest {
+    pub amount: Decimal,
+    pub exact_in: bool,
+    pub input_market: u16,
+    pub output_market: u16,
+    pub slippage_bps: u16,
+    pub use_direct_routes: Option<bool>,
+    pub exclude_dexes: Option<String>,
+    pub max_accounts: Option<usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PerpPositionExtended {
     pub liquidation_price: Decimal,
     pub unrealized_pnl: Decimal,
