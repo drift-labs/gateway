@@ -8,11 +8,10 @@ use std::{
 
 use base64::Engine as _;
 use drift_rs::{
-    constants::ProgramData,
+    constants::{ProgramData, DEFAULT_PUBKEY},
     drift_idl::{self, types::MarginRequirementType},
     event_subscriber::{try_parse_log, CommitmentConfig, RpcClient},
     jupiter::{JupiterSwapApi, SwapMode},
-    titan::{SwapMode as TitanSwapMode, TitanSwapApi},
     math::{
         constants::{BASE_PRECISION, MARGIN_PRECISION},
         leverage::get_leverage,
@@ -23,6 +22,7 @@ use drift_rs::{
     },
     priority_fee_subscriber::{PriorityFeeSubscriber, PriorityFeeSubscriberConfig},
     slot_subscriber::SlotSubscriber,
+    titan::{Provider, SwapMode as TitanSwapMode, TitanSwapApi},
     types::{
         self, accounts::SpotMarket, MarketId, MarketType, ModifyOrderParams, OrderParams,
         OrderStatus, ProgramError, RpcSendTransactionConfig, SdkError, SdkResult, VersionedMessage,
@@ -873,7 +873,7 @@ impl AppState {
                 req.output_market,
                 req.use_direct_routes,
                 req.exclude_dexes,
-                None, // providers
+                Some(Provider::Titan),
             ),
             self.client.get_user_account(&sub_account)
         )?;
