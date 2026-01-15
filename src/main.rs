@@ -626,8 +626,8 @@ mod tests {
             ),
         );
 
-        let rpc_endpoint = std::env::var("TEST_MAINNET_RPC_ENDPOINT")
-            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        let rpc_endpoint = std::env::var("TEST_RPC_ENDPOINT")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
         let state = AppState::new(
             &rpc_endpoint,
             true,
