@@ -130,6 +130,8 @@ These runtime environment variables are required:
 | `GRPC_HOST` | endpoint for gRPC subscription mode | `https://grpc.example.com`
 | `GRPC_X_TOKEN` | authentication token for gRPC subscription mode | `aabbccddeeff112233`
 | `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
+| `JUPITER_API_KEY` | **Required for `/v2/swap`**. Jupiter API key for swap operations. Get a free key at [portal.jup.ag](https://portal.jup.ag). See [migration guide](https://dev.jup.ag/portal/migrate-from-lite-api) | `your-jupiter-api-key` |
+| `JUPITER_API_URL` | (Optional) Override Jupiter API base URL | `https://api.jup.ag/swap/v1` |
 | `TITAN_AUTH_TOKEN` | **Required for `/v2/titan-swap`**. Authentication token for Titan API | `your-titan-auth-token` |
 | `TITAN_BASE_URL` | (Optional) Titan API base URL | `https://api.titan.exchange` |
 
@@ -713,6 +715,8 @@ $ curl localhost:8080/v2/orders/cancelAndPlace -X POST -H 'content-type: applica
 Executes a spot token swap using Jupiter routing and liquidity aggregation.
 for more info see jup docs: https://dev.jup.ag/docs/api/swap-api/quote
 
+⚠️ **Requires `JUPITER_API_KEY` environment variable to be set.** Get a free API key at [portal.jup.ag](https://portal.jup.ag). See [Jupiter API migration guide](https://dev.jup.ag/portal/migrate-from-lite-api) for details.
+
 **Endpoint**: `POST /v2/swap`
 
 **Parameters**:
@@ -729,7 +733,7 @@ Request body:
   "excludeDexes": bool,    // comma separated list of dexes to exclude
 }
 ```
-dexes: https://lite-api.jup.ag/swap/v1/program-id-to-label
+dexes: https://api.jup.ag/swap/v1/program-id-to-label
 
 **Response**:
 
