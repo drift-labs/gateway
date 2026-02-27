@@ -66,14 +66,16 @@ async fn accept_connection(
         .any(|w| w.eq_ignore_ascii_case(b"upgrade"))
     {
         warn!(target: LOG_TARGET, "non-WebSocket request from {}, rejecting", addr);
-        let _ = stream.write_all(
-            b"HTTP/1.1 426 Upgrade Required\r\n\
+        let _ = stream
+            .write_all(
+                b"HTTP/1.1 426 Upgrade Required\r\n\
               Content-Type: text/plain\r\n\
               Upgrade: websocket\r\n\
               Connection: Upgrade\r\n\
               \r\n\
               This is a WebSocket endpoint. Use a WebSocket client to connect.\n",
-        ).await;
+            )
+            .await;
         return;
     }
 
