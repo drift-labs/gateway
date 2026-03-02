@@ -1,12 +1,12 @@
 [package]
 name = "drift-gateway"
-version = "1.5.5"
+version = "1.5.6"
 edition = "2021"
 
 [dependencies]
 actix-web = "*"
 argh = "*"
-drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "0618036", features = ["titan"] }
+drift-rs = { git = "https://github.com/drift-labs/drift-rs", rev = "96fe2c", features = ["titan"] }
 base64 = "0.22.1"
 env_logger = "*"
 faster-hex = "0.10.0"
