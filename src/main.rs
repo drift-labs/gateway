@@ -302,8 +302,7 @@ async fn main() -> std::io::Result<()> {
     );
     sub_account_ids.dedup();
 
-    let (tx_not_confirmed_tx, tx_not_confirmed_rx) =
-        tokio::sync::broadcast::channel(64);
+    let (tx_not_confirmed_tx, tx_not_confirmed_rx) = tokio::sync::broadcast::channel(64);
 
     let state = AppState::new(
         &config.rpc_host,

@@ -398,7 +398,8 @@ impl AppState {
         .with_priority_fee(priority_fee, ctx.cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-        self.send_tx(tx, "cancel_orders", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "cancel_orders", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     /// Return position for market if given, otherwise return all positions
@@ -627,7 +628,8 @@ impl AppState {
             .build();
 
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-        self.send_tx(tx, "cancel_and_place", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "cancel_and_place", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn place_orders(
@@ -662,7 +664,9 @@ impl AppState {
                 .build();
 
                 let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-                let tx_res = self.send_tx(tx, "place_orders", ctx.ttl, Some(sub_account_id)).await;
+                let tx_res = self
+                    .send_tx(tx, "place_orders", ctx.ttl, Some(sub_account_id))
+                    .await;
                 match tx_res {
                     Ok(tx_res) => Ok(PlaceOrderResponse::Tx(tx_res)),
                     Err(e) => Err(e),
@@ -774,7 +778,8 @@ impl AppState {
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-        self.send_tx(tx, "modify_orders", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "modify_orders", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn swap(&self, ctx: Context, req: SwapRequest) -> GatewayResult<TxResponse> {
@@ -839,7 +844,8 @@ impl AppState {
         .build();
 
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-        self.send_tx(tx, "swap", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "swap", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn titan_swap(
@@ -909,7 +915,8 @@ impl AppState {
         .build();
 
         let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
-        self.send_tx(tx, "titan_swap", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "titan_swap", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn get_tx_events_for_subaccount_id(
@@ -1022,7 +1029,8 @@ impl AppState {
             sub_account_id,
         )
         .build();
-        self.send_tx(tx, "set_margin_ratio", ctx.ttl, Some(sub_account_id)).await
+        self.send_tx(tx, "set_margin_ratio", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub fn default_sub_account_id(&self) -> u16 {
