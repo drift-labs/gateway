@@ -1029,6 +1029,22 @@ denotes a subaccount swapped some amount of token (in) for another token (out)
 }
 ```
 
+**transaction not confirmed**
+
+Emitted when a transaction was not confirmed on-chain within the gateway TTL (e.g. dropped or expired). Clients subscribed to the same `subAccountId` as the request receive this event so they can stop polling or handle the failure without relying only on the `transactionEvent` HTTP endpoint.
+
+```json
+{
+  "data": {
+    "txNotConfirmed": {
+      "signature": "4ZCsjPSTrtGeToPzYDcd464MuhZbkJ8cg6G4qmtjgW1ZMLiAMXwMvVJtUqFPnrsN9HhrAJZyPE3Hn3QQqjfDFwAr"
+    }
+  },
+  "channel": "transaction",
+  "subAccountId": 0
+}
+```
+
 ### Errors
 
 error responses have the following JSON structure:
