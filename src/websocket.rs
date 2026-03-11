@@ -16,7 +16,7 @@ use serde_json::json;
 use tokio::{
     io::AsyncWriteExt,
     net::{TcpListener, TcpStream},
-    sync::Mutex,
+    sync::{broadcast, Mutex},
     task::JoinHandle,
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -26,12 +26,17 @@ use crate::{
     LOG_TARGET,
 };
 
+/// Message sent when a tx was not confirmed within the gateway TTL.
+/// (sub_account_id, signature)
+pub type TxNotConfirmedMessage = (u16, String);
+
 /// Start the websocket server
 pub async fn start_ws_server(
     listen_address: &str,
     ws_client: Arc<PubsubClient>,
     wallet: Arc<Wallet>,
     program_data: &'static ProgramData,
+    tx_not_confirmed_rx: Option<broadcast::Receiver<TxNotConfirmedMessage>>,
 ) {
     // Create the event loop and TCP listener we'll accept connections on.
     let listener = TcpListener::bind(&listen_address)
@@ -40,11 +45,13 @@ pub async fn start_ws_server(
     info!("Ws server listening at: ws://{}", listen_address);
     tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
+            let tx_rx = tx_not_confirmed_rx.as_ref().map(|r| r.resubscribe());
             tokio::spawn(accept_connection(
                 stream,
                 Arc::clone(&ws_client),
                 Arc::clone(&wallet),
                 program_data,
+                tx_rx,
             ));
         }
     });
@@ -55,6 +62,7 @@ async fn accept_connection(
     ws_client: Arc<PubsubClient>,
     wallet: Arc<Wallet>,
     program_data: &'static ProgramData,
+    tx_not_confirmed_rx: Option<broadcast::Receiver<TxNotConfirmedMessage>>,
 ) {
     let addr = stream.peer_addr().expect("peer address");
 
@@ -91,6 +99,45 @@ async fn accept_connection(
     let (mut ws_out, mut ws_in) = ws_stream.split();
     let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Message>(64);
     let subscriptions = Arc::new(Mutex::new(HashMap::<u8, JoinHandle<()>>::default()));
+
+    // forward tx-not-confirmed events to this connection when subscribed to the matching sub_account
+    if let Some(mut rx) = tx_not_confirmed_rx {
+        let message_tx = message_tx.clone();
+        let subscriptions = Arc::clone(&subscriptions);
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok((sub_account_id, signature)) => {
+                        let subs = subscriptions.lock().await;
+                        if subs.contains_key(&(sub_account_id as u8)) {
+                            let event = WsEvent {
+                                data: AccountEvent::TxNotConfirmed { signature },
+                                channel: Channel::Transaction,
+                                sub_account_id: sub_account_id as u8,
+                            };
+                            if message_tx
+                                .send(Message::text(
+                                    serde_json::to_string(&event).expect("serializes"),
+                                ))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        log::warn!(
+                            target: LOG_TARGET,
+                            "tx not confirmed broadcast lagged, dropped {} messages",
+                            n
+                        );
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+    }
 
     // writes messages to the connection
     tokio::spawn(async move {
@@ -235,13 +282,14 @@ enum Method {
     Unsubscribe,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Channel {
     Fills,
     Orders,
     Funding,
     Swap,
+    Transaction,
 }
 
 #[derive(Deserialize, Debug)]
@@ -334,6 +382,9 @@ pub(crate) enum AccountEvent {
         tx_idx: usize,
         signature: String,
     },
+    /// Emitted when a transaction was not confirmed within the gateway TTL (e.g. dropped or expired).
+    #[serde(rename_all = "camelCase")]
+    TxNotConfirmed { signature: String },
     #[serde(rename_all = "camelCase")]
     Trigger { order_id: u32, oracle_price: u64 },
 }
@@ -708,12 +759,12 @@ pub(crate) fn map_drift_event_for_account(
             }),
         ),
         DriftEvent::Swap {
-            user,
+            user: _,
             amount_in,
             amount_out,
             market_in,
             market_out,
-            fee,
+            fee: _,
             ts,
             signature,
             tx_idx,
@@ -733,5 +784,30 @@ pub(crate) fn map_drift_event_for_account(
                 }),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AccountEvent, Channel, WsEvent};
+
+    #[test]
+    fn tx_not_confirmed_serializes_with_expected_shape() {
+        let event = WsEvent {
+            data: AccountEvent::TxNotConfirmed {
+                signature: "4ZCsjPSTrtGeToPzYDcd464MuhZbkJ8cg6G4qmtjgW1Z".to_string(),
+            },
+            channel: Channel::Transaction,
+            sub_account_id: 0,
+        };
+        let json = serde_json::to_string(&event).expect("serializes");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+        assert_eq!(parsed["channel"], "transaction");
+        assert_eq!(parsed["subAccountId"], 0);
+        assert!(parsed["data"]["txNotConfirmed"].is_object());
+        assert_eq!(
+            parsed["data"]["txNotConfirmed"]["signature"],
+            "4ZCsjPSTrtGeToPzYDcd464MuhZbkJ8cg6G4qmtjgW1Z"
+        );
     }
 }

@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(dead_code, unused_imports))]
+
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -5,6 +7,8 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
+
+use tokio::sync::broadcast;
 
 use base64::Engine as _;
 use drift_rs::{
@@ -57,7 +61,7 @@ use crate::{
         TxEventsResponse, TxResponse, UserCollateralResponse, UserLeverageResponse,
         UserMarginResponse, PRICE_DECIMALS,
     },
-    websocket::map_drift_event_for_account,
+    websocket::{map_drift_event_for_account, TxNotConfirmedMessage},
     Context, LOG_TARGET,
 };
 
@@ -96,6 +100,8 @@ pub struct AppState {
     extra_rpcs: Vec<Arc<RpcClient>>,
     /// swift node url
     swift_node: String,
+    /// broadcast sender for tx-not-confirmed WS events (None when not wired)
+    tx_not_confirmed_tx: Option<broadcast::Sender<TxNotConfirmedMessage>>,
 }
 
 impl AppState {
@@ -133,6 +139,7 @@ impl AppState {
         skip_tx_preflight: bool,
         extra_rpcs: Vec<&str>,
         swift_node: String,
+        tx_not_confirmed_tx: Option<broadcast::Sender<TxNotConfirmedMessage>>,
     ) -> Self {
         let (state_commitment, tx_commitment) =
             commitment.unwrap_or((CommitmentConfig::confirmed(), CommitmentConfig::confirmed()));
@@ -198,6 +205,7 @@ impl AppState {
                 .map(|u| Arc::new(RpcClient::new(get_http_url(u).expect("valid RPC url"))))
                 .collect(),
             swift_node,
+            tx_not_confirmed_tx,
         }
     }
 
@@ -391,7 +399,9 @@ impl AppState {
         )
         .with_priority_fee(priority_fee, ctx.cu_limit);
         let tx = build_cancel_ix(builder, req)?.build();
-        self.send_tx(tx, "cancel_orders", ctx.ttl).await
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+        self.send_tx(tx, "cancel_orders", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     /// Return position for market if given, otherwise return all positions
@@ -619,7 +629,9 @@ impl AppState {
             .place_orders(orders)
             .build();
 
-        self.send_tx(tx, "cancel_and_place", ctx.ttl).await
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+        self.send_tx(tx, "cancel_and_place", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn place_orders(
@@ -653,7 +665,10 @@ impl AppState {
                 .place_orders(orders)
                 .build();
 
-                let tx_res = self.send_tx(tx, "place_orders", ctx.ttl).await;
+                let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+                let tx_res = self
+                    .send_tx(tx, "place_orders", ctx.ttl, Some(sub_account_id))
+                    .await;
                 match tx_res {
                     Ok(tx_res) => Ok(PlaceOrderResponse::Tx(tx_res)),
                     Err(e) => Err(e),
@@ -764,7 +779,9 @@ impl AppState {
         )
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit);
         let tx = build_modify_ix(builder, req, self.client.program_data())?.build();
-        self.send_tx(tx, "modify_orders", ctx.ttl).await
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+        self.send_tx(tx, "modify_orders", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn swap(&self, ctx: Context, req: SwapRequest) -> GatewayResult<TxResponse> {
@@ -828,7 +845,9 @@ impl AppState {
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
         .build();
 
-        self.send_tx(tx, "swap", ctx.ttl).await
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+        self.send_tx(tx, "swap", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn titan_swap(
@@ -897,7 +916,9 @@ impl AppState {
         .with_priority_fee(ctx.cu_price.unwrap_or(pf), ctx.cu_limit)
         .build();
 
-        self.send_tx(tx, "titan_swap", ctx.ttl).await
+        let sub_account_id = ctx.sub_account_id.unwrap_or(self.default_sub_account_id());
+        self.send_tx(tx, "titan_swap", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub async fn get_tx_events_for_subaccount_id(
@@ -1010,7 +1031,8 @@ impl AppState {
             sub_account_id,
         )
         .build();
-        self.send_tx(tx, "set_margin_ratio", ctx.ttl).await
+        self.send_tx(tx, "set_margin_ratio", ctx.ttl, Some(sub_account_id))
+            .await
     }
 
     pub fn default_sub_account_id(&self) -> u16 {
@@ -1028,6 +1050,7 @@ impl AppState {
         tx: VersionedMessage,
         reason: &'static str,
         _ttl: Option<u16>,
+        _sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
         match self.client.simulate_tx(tx).await?.err {
             Some(err) => {
@@ -1047,6 +1070,7 @@ impl AppState {
         tx: VersionedMessage,
         reason: &'static str,
         ttl: Option<u16>,
+        sub_account_id: Option<u16>,
     ) -> GatewayResult<TxResponse> {
         let recent_block_hash = self.client.get_latest_blockhash().await?;
         let tx = self.wallet.sign_tx(tx, recent_block_hash)?;
@@ -1080,6 +1104,8 @@ impl AppState {
         let primary_rpc = Arc::clone(&self.client).rpc();
         let tx_signature = sig;
         let extra_rpcs = self.extra_rpcs.clone();
+        let tx_not_confirmed_tx = self.tx_not_confirmed_tx.clone();
+        let sub_account_id_for_ws = sub_account_id;
         tokio::spawn(async move {
             let start = SystemTime::now();
             let ttl = Duration::from_secs(ttl.unwrap_or(DEFAULT_TX_TTL) as u64);
@@ -1115,6 +1141,9 @@ impl AppState {
             }
             if !confirmed {
                 warn!(target: LOG_TARGET, "tx was not confirmed: {tx_signature:?}");
+                if let (Some(tx), Some(sid)) = (tx_not_confirmed_tx, sub_account_id_for_ws) {
+                    let _ = tx.send((sid, tx_signature.to_string()));
+                }
             }
         });
 

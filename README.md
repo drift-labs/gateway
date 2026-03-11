@@ -3,41 +3,42 @@
 Self hosted API gateway to easily interact with Drift V2 Protocol
 
 ## Table of Contents
+
 1. [Build & Run](#build--run)
-    - [From Source](#from-source)
-    - [From Docker](#from-docker)
+   - [From Source](#from-source)
+   - [From Docker](#from-docker)
 2. [Usage](#usage)
-    - [Environment Variables](#environment-variables)
-    - [Delegated Signing Mode](#delegated-signing-mode)
-    - [Sub-account Switching](#sub-account-switching)
-    - [Emulation Mode](#emulation-mode)
-    - [Transaction Confirmation](#transaction-confirmtaion-and-ttl)
-    - [CU price/limits](#cu-price--limits)
+   - [Environment Variables](#environment-variables)
+   - [Delegated Signing Mode](#delegated-signing-mode)
+   - [Sub-account Switching](#sub-account-switching)
+   - [Emulation Mode](#emulation-mode)
+   - [Transaction Confirmation](#transaction-confirmtaion-and-ttl)
+   - [CU price/limits](#cu-price--limits)
 3. [API Examples](#api-examples)
-    - [HTTP API](#http-api)
-      - [`GET` Market Info](#get-market-info)
-      - [`GET` Orderbook](#get-orderbook)
-      - [`GET` Orders](#get-orders)
-      - [`GET` Positions](#get-positions)
-      - [`GET` Perp Position Info](#get-position-info-perps-only)
-      - [`GET` Transaction Events](#get-transaction-events)
-      - [`GET` SOL Balance](#get-sol-balance)
-      - [`GET` Authority](#get-authority)
-      - [`GET` Margin Info](#get-margin-info)
-      - [`GET` Leverage](#get-leverage)
-      - [`POST` Leverage](#set-leverage)
-      - [`GET` Collateral](#get-collateral)
-      - [`POST` Place Orders](#place-orders)
-      - [`PATCH` Modify Orders](#modify-orders)
-      - [`DELETE` Cancel Orders](#cancel-orders)
-      - [`POST` Swap](#swap-orders)
-      - [`POST` Titan Swap](#titan-swap-orders)
-      - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
-    - [Websocket API](#websocket-api)
-      - [Subscribing](#subscribing)
-      - [Event Payloads](#event-payloads)
-  4. [Errors](#errors)
-  5. [FAQ](#faq)
+   - [HTTP API](#http-api)
+     - [`GET` Market Info](#get-market-info)
+     - [`GET` Orderbook](#get-orderbook)
+     - [`GET` Orders](#get-orders)
+     - [`GET` Positions](#get-positions)
+     - [`GET` Perp Position Info](#get-position-info-perps-only)
+     - [`GET` Transaction Events](#get-transaction-events)
+     - [`GET` SOL Balance](#get-sol-balance)
+     - [`GET` Authority](#get-authority)
+     - [`GET` Margin Info](#get-margin-info)
+     - [`GET` Leverage](#get-leverage)
+     - [`POST` Leverage](#set-leverage)
+     - [`GET` Collateral](#get-collateral)
+     - [`POST` Place Orders](#place-orders)
+     - [`PATCH` Modify Orders](#modify-orders)
+     - [`DELETE` Cancel Orders](#cancel-orders)
+     - [`POST` Swap](#swap-orders)
+     - [`POST` Titan Swap](#titan-swap-orders)
+     - [`PUT` Atomic Cancel/Modify/Place Orders](#atomic-cancelmodifyplace-orders)
+   - [Websocket API](#websocket-api)
+     - [Subscribing](#subscribing)
+     - [Event Payloads](#event-payloads)
+4. [Errors](#errors)
+5. [FAQ](#faq)
 
 ## Build & Run
 
@@ -46,6 +47,7 @@ Self hosted API gateway to easily interact with Drift V2 Protocol
 ### From Docker
 
 Use prebuilt image, ghcr.io:
+
 ```bash
 # authenticate to github container registry
 docker login -u <GITHUB_USERNAME> -P <GITHUB_PAT_TOKEN>
@@ -95,6 +97,7 @@ ldconfig
 ```
 
 Run:
+
 ```bash
 # configure the gateway signing key
 export DRIFT_GATEWAY_KEY=</PATH/TO/KEY.json | seedBase58>
@@ -109,7 +112,9 @@ drift-gateway https://rpc-provider.example.com --markets sol-perp,sol,weth
 ```
 
 ## gRPC mode
+
 Run gateway subscriptions with geyser gRPC updates
+
 ```bash
 export GRPC_HOST="grpc.example.com"
 export GRPC_X_TOKEN="aabbccddeeff112233"
@@ -124,16 +129,16 @@ drift-gateway https://rpc-provider.example.com --grpc
 
 These runtime environment variables are required:
 
-| Variable            | Description                               | Example Value                |
-|---------------------|-------------------------------------------|------------------------------|
-| `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair | `</PATH/TO/KEY.json>` or `seedBase58` |
-| `GRPC_HOST` | endpoint for gRPC subscription mode | `https://grpc.example.com`
-| `GRPC_X_TOKEN` | authentication token for gRPC subscription mode | `aabbccddeeff112233`
-| `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec | `1` |
-| `JUPITER_API_KEY` | **Required for `/v2/swap`**. Jupiter API key for swap operations. Get a free key at [portal.jup.ag](https://portal.jup.ag). See [migration guide](https://dev.jup.ag/portal/migrate-from-lite-api) | `your-jupiter-api-key` |
-| `JUPITER_API_URL` | (Optional) Override Jupiter API base URL | `https://api.jup.ag/swap/v1` |
-| `TITAN_AUTH_TOKEN` | **Required for `/v2/titan-swap`**. Authentication token for Titan API | `your-titan-auth-token` |
-| `TITAN_BASE_URL` | (Optional) Titan API base URL | `https://api.titan.exchange` |
+| Variable            | Description                                                                                                                                                                                        | Example Value                         |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `DRIFT_GATEWAY_KEY` | Path to your key file or seed in Base58. Transactions will be signed with this keypair                                                                                                             | `</PATH/TO/KEY.json>` or `seedBase58` |
+| `GRPC_HOST`         | endpoint for gRPC subscription mode                                                                                                                                                                | `https://grpc.example.com`            |
+| `GRPC_X_TOKEN`      | authentication token for gRPC subscription mode                                                                                                                                                    | `aabbccddeeff112233`                  |
+| `INIT_RPC_THROTTLE` | Adds a delay (seconds) between RPC bursts during gateway startup. Useful to avoid 429/rate-limit errors. Can be set to `0`, if RPC node is highspec                                                | `1`                                   |
+| `JUPITER_API_KEY`   | **Required for `/v2/swap`**. Jupiter API key for swap operations. Get a free key at [portal.jup.ag](https://portal.jup.ag). See [migration guide](https://dev.jup.ag/portal/migrate-from-lite-api) | `your-jupiter-api-key`                |
+| `JUPITER_API_URL`   | (Optional) Override Jupiter API base URL                                                                                                                                                           | `https://api.jup.ag/swap/v1`          |
+| `TITAN_AUTH_TOKEN`  | **Required for `/v2/titan-swap`**. Authentication token for Titan API                                                                                                                              | `your-titan-auth-token`               |
+| `TITAN_BASE_URL`    | (Optional) Titan API base URL                                                                                                                                                                      | `https://api.titan.exchange`          |
 
 ```bash
 ./target/release/drift-gateway --help
@@ -201,7 +206,7 @@ note therefore `DRIFT_GATEWAY_KEY` is not required to be set.
 
 **CU limit** may be set on transaction request with the query parameter `computeUnitLimit=300000`, the default if unset is `200000`.
 
-**CU price** in micro-lamports may be set on transaction request with the query parameter `computeUnitPrice=1000`, the default if unset is a dynamic value from chain set at 90-th percentile of the local fee market.  
+**CU price** in micro-lamports may be set on transaction request with the query parameter `computeUnitPrice=1000`, the default if unset is a dynamic value from chain set at 90-th percentile of the local fee market.
 
 The following error is logged when a tx does not have enough CU limit, increasing the cu limit can fix it or reducing number complexity of the order e..g number of orders/markets per batch.
 
@@ -220,18 +225,19 @@ $ curl 'localhost:8080/v2/orders?computeUnitLimit=300000&computeUnitPrice=1000' 
 ## Transaction Confirmation and TTLs
 
 Gateway endpoints that place network transactions will return the signature as a base64 string.  
-User's can poll `transactionEvent` to confirm success by signature or watch Ws events for e.g. confirmation by order Ids instead.  
+User's can poll `transactionEvent` to confirm success by signature or watch Ws events for e.g. confirmation by order Ids instead.
 
 Gateway will resubmit txs until they are either confirmed by the network or timeout.  
 This allows gateway txs to have a higher chance of confirmation during busy network periods.  
-setting `?ttl=<TIMEOUT_IN_SECS>` on a request determines how long gateway will resubmit txs for, (default: 4s/~10 slots). 
-e.g. `ttl?=2` means that the tx will be rebroadcast over the next 5 slots (5 * 400ms).  
+setting `?ttl=<TIMEOUT_IN_SECS>` on a request determines how long gateway will resubmit txs for, (default: 4s/~10 slots).
+e.g. `ttl?=2` means that the tx will be rebroadcast over the next 5 slots (5 \* 400ms).
 
 ⚠️ users should take care to set either `max_order` ts or use atomic place/cancel/modify requests to prevent
-double orders or orders being accepted later than intended.  
+double orders or orders being accepted later than intended.
 
 improving tx confirmation rates will require trial and error, try adjusting tx TTL and following parameters until
 results are meet requirements:
+
 - set `--extra-rpcs=<RPC_1>,<RPC_2>` to broadcast tx to multiple nodes
 - set `--skip-tx-preflight` to disable preflight RPC checks
 - setting a longer `ttl` per request
@@ -277,7 +283,7 @@ $ curl localhost:8080/v2/markets
       "symbol": "SOL",
       "priceStep": "0.0001",
       "amountStep": "0.1",
-      "minOrderSize": "0.1",
+      "minOrderSize": "0.1"
     }
     // ...
   ],
@@ -297,6 +303,7 @@ $ curl localhost:8080/v2/markets
 ```
 
 ## Get Margin Info
+
 Returns the account margin requirements
 
 ```bash
@@ -313,6 +320,7 @@ $ curl localhost:8080/v2/user/marginInfo
 ```
 
 ## Get Leverage
+
 Returns the account leverage
 
 ```bash
@@ -323,11 +331,12 @@ $ curl localhost:8080/v2/leverage
 
 ```json
 {
-   "leverage" : "0.094489"
+  "leverage": "0.094489"
 }
 ```
 
 ## Set Leverage
+
 Set the max initial margin / leverage on sub-account
 
 ```bash
@@ -340,6 +349,7 @@ $ curl localhost:8080/v2/leverage -d '{"leverage":"0.1"}'
 Returns solana tx signature on success
 
 ## Get Collateral
+
 Returns the account's maintenance collateral
 
 ```bash
@@ -350,8 +360,8 @@ $ curl localhost:8080/v2/collateral
 
 ```json
 {
-   "total":"1661.195815",
-   "free":"1653.531255"
+  "total": "1661.195815",
+  "free": "1653.531255"
 }
 ```
 
@@ -479,6 +489,7 @@ $ curl localhost:8080/v2/positionInfo/0
 ```
 
 note:
+
 - `unrealizedPnL` is based on the oracle price at time of query
 - `unsettledPnl` does not include unsettled funding amounts
 
@@ -508,11 +519,10 @@ $ curl localhost:8080/v2/transactionEvent/5JuobpnzPzwgdha4d7FpUHpvkinhyXCJhnPPkw
 
 A successful tx must bed confirm onchain and also execute successfully, the following table shows the possible responses from this endpoint:
 
-|                   | execute ok                             | execute fail          |
-|-------------------|------------------------------------------|-------------------------|
+|              | execute ok                                 | execute fail                                |
+| ------------ | ------------------------------------------ | ------------------------------------------- |
 | confirm ok   | `200, {"success": true, "events": [...] }` | `200, { "success": false, "error": "msg" }` |
-| confirm fail | `404`                                      | `404`
-
+| confirm fail | `404`                                      | `404`                                       |
 
 **Response**
 
@@ -536,7 +546,7 @@ A response with a fill belonging to sub-account 0
       }
     }
   ],
-  "success":true
+  "success": true
 }
 ```
 
@@ -554,7 +564,7 @@ A response for a transaction that was found, but doesn't contain any events for 
 ```json
 {
   "events": [],
-  "success":true
+  "success": true
 }
 ```
 
@@ -567,10 +577,13 @@ A response for a transaction that was confirmed onchain but failed execution e.g
   "success": false
 }
 ```
+
 full list of error codes [here](https://drift-labs.github.io/v2-teacher/#errors)
 
 ### Get SOL balance
+
 Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
+
 ```bash
 $ curl localhost:8080/v2/balance
 ```
@@ -580,7 +593,9 @@ $ curl localhost:8080/v2/balance
 ```
 
 ### Get Authority
+
 Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
+
 ```bash
 $ curl localhost:8080/v2/authority
 ```
@@ -588,7 +603,6 @@ $ curl localhost:8080/v2/authority
 ```json
 { "pubkey": "key" }
 ```
-
 
 ### Place Orders
 
@@ -722,22 +736,25 @@ for more info see jup docs: https://dev.jup.ag/docs/api/swap-api/quote
 **Parameters**:
 
 Request body:
+
 ```json
 {
   "inputMarket": number,   // Input spot market index
   "outputMarket": number,  // Output spot market index
-  "exactIn": boolean,      // true = exactIn, false, exactOut 
+  "exactIn": boolean,      // true = exactIn, false, exactOut
   "amount": string,        // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
   "slippage": number,      // Max slippage in bps
   "useDirectRoutes": bool, // Direct Routes limits Jupiter routing to single hop routes only
   "excludeDexes": bool,    // comma separated list of dexes to exclude
 }
 ```
+
 dexes: https://api.jup.ag/swap/v1/program-id-to-label
 
 **Response**:
 
 Success (200):
+
 ```json
 {
   "signature": string,   // Transaction signature
@@ -746,6 +763,7 @@ Success (200):
 ```
 
 Error (400/500):
+
 ```json
 {
   "code": number,       // Error code
@@ -755,6 +773,7 @@ Error (400/500):
 
 **Example**:
 USDC to SOL
+
 ```bash
 curl -X POST "http://localhost:8080/v2/swap" \
   -H "Content-Type: application/json" \
@@ -784,11 +803,12 @@ Executes a spot token swap using Titan routing and liquidity aggregation.
 **Parameters**:
 
 Request body:
+
 ```json
 {
   "inputMarket": number,   // Input spot market index
   "outputMarket": number,  // Output spot market index
-  "exactIn": boolean,      // true = exactIn, false = exactOut 
+  "exactIn": boolean,      // true = exactIn, false = exactOut
   "amount": string,        // Amount of input token to sell when exactIn=true OR amount of output token to buy when exactIn=false
   "slippageBps": number,   // Max slippage in bps
   "useDirectRoutes": bool, // (Optional) Direct Routes limits routing to single hop routes only
@@ -800,6 +820,7 @@ Request body:
 **Response**:
 
 Success (200):
+
 ```json
 {
   "signature": string,   // Transaction signature
@@ -808,6 +829,7 @@ Success (200):
 ```
 
 Error (400/500):
+
 ```json
 {
   "code": number,       // Error code
@@ -817,6 +839,7 @@ Error (400/500):
 
 **Example**:
 USDC to SOL
+
 ```bash
 curl -X POST "http://localhost:8080/v2/titan-swap" \
   -H "Content-Type: application/json" \
@@ -1029,6 +1052,22 @@ denotes a subaccount swapped some amount of token (in) for another token (out)
 }
 ```
 
+**transaction not confirmed**
+
+Emitted when a transaction was not confirmed on-chain within the gateway TTL (e.g. dropped or expired). Clients subscribed to the same `subAccountId` as the request receive this event so they can stop polling or handle the failure without relying only on the `transactionEvent` HTTP endpoint.
+
+```json
+{
+  "data": {
+    "txNotConfirmed": {
+      "signature": "4ZCsjPSTrtGeToPzYDcd464MuhZbkJ8cg6G4qmtjgW1ZMLiAMXwMvVJtUqFPnrsN9HhrAJZyPE3Hn3QQqjfDFwAr"
+    }
+  },
+  "channel": "transaction",
+  "subAccountId": 0
+}
+```
+
 ### Errors
 
 error responses have the following JSON structure:
@@ -1060,9 +1099,9 @@ Use the UI or Ts/Python sdk to initialize the sub-account first.
 #### `429`s / gateway hitting RPC rate limits
 
 this can occur during gateway startup as drift market data is pulled from the network and subscriptions are initialized.  
-try setting `INIT_RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.  
+try setting `INIT_RPC_THROTTLE=2` for e.g. 2s or longer, this allows some time between request bursts on start up.
 
-The free \_api.mainnet-beta.solana.com_ RPC support is limited due to rate-limits
+The free \_api.mainnet-beta.solana.com\_ RPC support is limited due to rate-limits
 
 ```rust
 Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(429), ...
@@ -1071,4 +1110,4 @@ Some(GetProgramAccounts), kind: Reqwest(reqwest::Error { kind: Status(429), ...
 #### Slow queries
 
 Queries longer than a few _ms_ may be due to missing market subscriptions.  
-Ensure gateway is properly configured with intended markets. 
+Ensure gateway is properly configured with intended markets.

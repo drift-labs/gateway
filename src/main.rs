@@ -302,6 +302,8 @@ async fn main() -> std::io::Result<()> {
     );
     sub_account_ids.dedup();
 
+    let (tx_not_confirmed_tx, tx_not_confirmed_rx) = tokio::sync::broadcast::channel(64);
+
     let state = AppState::new(
         &config.rpc_host,
         config.dev,
@@ -313,6 +315,7 @@ async fn main() -> std::io::Result<()> {
             .map(|s| s.split(",").collect())
             .unwrap_or_default(),
         config.swift_node,
+        Some(tx_not_confirmed_tx),
     )
     .await;
 
@@ -378,6 +381,7 @@ async fn main() -> std::io::Result<()> {
         client.ws(),
         Arc::clone(&state.wallet),
         client.program_data(),
+        Some(tx_not_confirmed_rx),
     )
     .await;
 
@@ -606,12 +610,14 @@ mod tests {
             false,
             vec![],
             "https://master.swift.drift.trade".to_string(),
+            None,
         )
         .await
     }
 
     // likely safe to ignore during development, mainly regression test for CI
     #[actix_web::test]
+    #[ignore = "network/rpc dependent; run with --ignored when TEST_DELEGATED_SIGNER set"]
     async fn delegated_signing_ok() {
         let _ = env_logger::try_init();
         let delegated_seed =
@@ -637,6 +643,7 @@ mod tests {
             false,
             vec![],
             "https://master.swift.drift.trade".to_string(),
+            None,
         )
         .await;
 
@@ -660,6 +667,7 @@ mod tests {
 
     // likely safe to ignore during development, mainly regression test for CI
     #[actix_web::test]
+    #[ignore = "requires JUPITER_API_KEY; run with --ignored when key set"]
     async fn delegated_swap_works() {
         let _ = env_logger::try_init();
         let delegated_seed =
@@ -685,6 +693,7 @@ mod tests {
             false,
             vec![],
             "https://master.swift.drift.trade".to_string(),
+            None,
         )
         .await;
 
@@ -713,6 +722,7 @@ mod tests {
 
     // likely safe to ignore during development, mainly regression test for CI
     #[actix_web::test]
+    #[ignore = "requires JUPITER_API_KEY; run with --ignored when key set"]
     async fn swap_works() {
         let _ = env_logger::try_init();
         let wallet = create_wallet(Some(get_seed()), None, None);
@@ -728,6 +738,7 @@ mod tests {
             false,
             vec![],
             "https://master.swift.drift.trade".to_string(),
+            None,
         )
         .await;
 
@@ -864,6 +875,7 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore = "network/rpc dependent; run with --ignored when RPC returns expected tx shape"]
     async fn get_tx_events_works() {
         let _ = env_logger::try_init();
         let controller = setup_controller(Some(
@@ -916,6 +928,7 @@ mod tests {
     }
 
     #[actix_web::test]
+    #[ignore = "network/rpc dependent; run with --ignored when RPC returns expected tx shape"]
     async fn get_tx_events_works_for_wrong_subaccount() {
         let _ = env_logger::try_init();
         let controller = setup_controller(Some(
