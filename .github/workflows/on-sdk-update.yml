@@ -8,7 +8,7 @@ jobs:
     runs-on: ubicloud
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Load drift-rs version
       run: |
@@ -19,7 +19,7 @@ jobs:
         sed -i '/^drift-rs/s/tag = ".*"/tag = "'$SDK_VERSION'"/' Cargo.toml
 
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1
       with:
         profile: minimal
         toolchain: stable
