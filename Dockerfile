@@ -3,7 +3,7 @@ FROM rust:1.85 AS builder
 RUN apt-get update && apt-get install -y libgcc1 jq
 WORKDIR /build
 RUN rustup component add rustfmt
-RUN SO_URL=$(curl -s https://api.github.com/repos/drift-labs/drift-ffi-sys/releases/latest | jq -r '.assets[] | select(.name=="libdrift_ffi_sys.so") | .browser_download_url') &&\
+RUN SO_URL=$(curl -s https://api.github.com/repos/velocity-exchange/drift-ffi-sys/releases/latest | jq -r '.assets[] | select(.name=="libdrift_ffi_sys.so") | .browser_download_url') &&\
   curl -L -o libdrift_ffi_sys.so "$SO_URL" &&\
   cp libdrift_ffi_sys.so /usr/local/lib
 
