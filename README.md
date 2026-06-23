@@ -54,7 +54,7 @@ docker run \
   -e DRIFT_GATEWAY_KEY=<BASE58_SEED> \
   -p 8080:8080 \
   --platform linux/x86_64 \
-  ghcr.io/drift-labs/gateway https://rpc-provider.example.com --host 0.0.0.0 \
+  ghcr.io/velocity-exchange/gateway https://rpc-provider.example.com --host 0.0.0.0 \
   --markets wbtc,drift
   --extra-rpcs https://api.mainnet-beta.solana.com
 ```
@@ -247,7 +247,7 @@ $ curl 'localhost:8080/v2/orders?ttl=2' -X POST \
 
 ## API Examples
 
-Please refer to https://drift-labs.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
+Please refer to https://velocity-exchange.github.io/v2-teacher/ for further examples and reference documentation on various types, fields, and operations available on drift.
 
 ### HTTP API
 
@@ -379,7 +379,7 @@ To query or stream orderbooks via WebSocket, public DLOB servers are available a
 - devnet: `wss://master.dlob.drift.trade/ws`
 - mainnet: `wss://dlob.drift.trade/ws`
 
-see https://github.com/drift-labs/dlob-server/blob/master/example/wsClient.ts for usage example
+see https://github.com/velocity-exchange/dlob-server/blob/master/example/wsClient.ts for usage example
 
 ### Get Orders
 
@@ -567,7 +567,7 @@ A response for a transaction that was confirmed onchain but failed execution e.g
   "success": false
 }
 ```
-full list of error codes [here](https://drift-labs.github.io/v2-teacher/#errors)
+full list of error codes [here](https://velocity-exchange.github.io/v2-teacher/#errors)
 
 ### Get SOL balance
 Return the on-chain SOL balance of the transaction signer (`DRIFT_GATEWAY_KEY`)
@@ -1041,7 +1041,7 @@ error responses have the following JSON structure:
 ```
 
 Some endpoints send transactions to the drift program and can return program error codes.
-The full list of drift program error codes is available in the [API docs](https://drift-labs.github.io/v2-teacher/#errors)
+The full list of drift program error codes is available in the [API docs](https://velocity-exchange.github.io/v2-teacher/#errors)
 
 ### FAQ
 
